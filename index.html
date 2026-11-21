@@ -147,7 +147,7 @@
 <script>
   const $ = id => document.getElementById(id);
   const MAX = 12;
-  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '';
+  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '';
   try { RANGE = localStorage.getItem('range') || 'all'; } catch (e) {}
   try { FOCUS = localStorage.getItem('focus') || ''; } catch (e) {}
   try { $('pass').value = localStorage.getItem('pass') || ''; $('me').value = localStorage.getItem('me') || ''; } catch (e) {}
@@ -170,7 +170,78 @@
   }
   function errText(e) { return (e && e.message) || String(e); }
   // 送る前に画像を軽くする：幅は最大900px、JPEG（画質0.8）に。文字の読み取りには十分で、大きさは数分の一になる
+  // ===== 撮影時刻を決める：①ファイル名の日時 ②画像の中の撮影日時（Exif など） ③ファイルの日時 ④送った時刻 =====
+  const hasNameTime = n => { let run = 0; for (const ch of String(n)) { if (ch >= '0' && ch <= '9') { if (++run >= 8) return true; } else run = 0; } return false; };
+  function exifTime(buf) {
+    // 画像の中の撮影日時を探す（JPEG の Exif、PNG の eXIf・テキスト）。見つからなければ 0
+    try {
+      const u8 = new Uint8Array(buf), dv = new DataView(buf);
+      const tiff = off => {
+        if (String.fromCharCode(u8[off], u8[off + 1], u8[off + 2], u8[off + 3]) === 'Exif') off += 6;   // 「Exif」の見出しが付いていることがある
+        const bo = dv.getUint16(off);
+        if (bo !== 0x4949 && bo !== 0x4D4D) return '';
+        const le = bo === 0x4949;
+        const g16 = o => dv.getUint16(off + o, le), g32 = o => dv.getUint32(off + o, le);
+        const readIfd = (ifd, want) => {
+          const n = g16(ifd), out = {};
+          for (let i = 0; i < n; i++) {
+            const e = ifd + 2 + i * 12, tag = g16(e);
+            if (want.indexOf(tag) >= 0) out[tag] = { cnt: g32(e + 4), val: g32(e + 8) };
+          }
+          return out;
+        };
+        const str = (o, cnt) => { let t = ''; for (let i = 0; i < cnt - 1; i++) t += String.fromCharCode(u8[off + o + i]); return t; };
+        const ifd0 = readIfd(g32(4), [0x0132, 0x8769]);
+        let t = '';
+        if (ifd0[0x8769]) { const ex = readIfd(ifd0[0x8769].val, [0x9003, 0x9004]); const e = ex[0x9003] || ex[0x9004]; if (e) t = str(e.val, e.cnt); }
+        if (!t && ifd0[0x0132]) t = str(ifd0[0x0132].val, ifd0[0x0132].cnt);
+        return t;
+      };
+      const parse = t => {   // "2026:11:21 20:38:51" など
+        const d = String(t).split('-').join(':').split('T').join(' ').split(' ');
+        const a = (d[0] || '').split(':').map(Number), b = (d[1] || '').split(':').map(Number);
+        if (a.length < 3 || !a[0] || !a[1]) return 0;
+        const ms = new Date(a[0], a[1] - 1, a[2], b[0] || 0, b[1] || 0, Math.floor(b[2] || 0)).getTime();
+        return ms > 1500000000000 ? ms : 0;
+      };
+      if (u8[0] === 0xFF && u8[1] === 0xD8) {   // JPEG
+        let o = 2;
+        while (o + 4 < u8.length && u8[o] === 0xFF) {
+          const mk = u8[o + 1], len = dv.getUint16(o + 2);
+          if (mk === 0xE1 && String.fromCharCode(u8[o + 4], u8[o + 5], u8[o + 6], u8[o + 7]) === 'Exif') return parse(tiff(o + 10));
+          if (mk === 0xDA) break;
+          o += 2 + len;
+        }
+      } else if (u8[0] === 0x89 && u8[1] === 0x50) {   // PNG
+        let o = 8;
+        while (o + 8 < u8.length) {
+          const len = dv.getUint32(o), type = String.fromCharCode(u8[o + 4], u8[o + 5], u8[o + 6], u8[o + 7]);
+          if (type === 'eXIf') return parse(tiff(o + 8));
+          if (type === 'tEXt' || type === 'iTXt') {
+            let t = ''; for (let i = 0; i < Math.min(len, 4000); i++) t += String.fromCharCode(u8[o + 8 + i]);
+            for (const key of ['DateTimeOriginal', 'CreateDate', 'Creation Time']) {
+              const k = t.indexOf(key);
+              if (k >= 0) { const m = parse(t.slice(k + key.length).split('').filter(c => c >= '0' && c <= '9' || c === ':' || c === '-' || c === ' ' || c === 'T').join('').trim().slice(0, 19)); if (m) return m; }
+            }
+          }
+          if (type === 'IDAT' || type === 'IEND') break;
+          o += 12 + len;
+        }
+      }
+    } catch (e) {}
+    return 0;
+  }
+  async function shotTime(f) {
+    if (hasNameTime(f.name)) return { t: 0, src: 'name' };
+    try { const m = exifTime(await f.arrayBuffer()); if (m) return { t: m, src: 'exif' }; } catch (e) {}
+    // ファイルの日時が「今」に近すぎるときは、選んだときにコピーされた日時なので使わない
+    if (f.lastModified && Date.now() - f.lastModified > 3 * 60000) return { t: f.lastModified, src: 'file' };
+    return { t: Date.now(), src: 'upload' };
+  }
+  const SRC_TEXT = { name: '画像の名前', exif: '画像の中の撮影日時', file: 'ファイルの日時', upload: '送った時刻（撮影時刻が分からないため）' };
+
   async function shrink(f) {
+    const tm = await shotTime(f);
     try {
       const url = URL.createObjectURL(f);
       const img = await new Promise((ok, ng) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ng; i.src = url; });
@@ -180,9 +251,9 @@
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
       const data = c.toDataURL('image/jpeg', 0.8).split(',')[1];
-      return { name: String(f.name || 'image').replace(/[.][a-z0-9]+$/i, '') + '.jpg', type: 'image/jpeg', data: data, lastModified: f.lastModified };
+      return { name: String(f.name || 'image').replace(/[.][a-z0-9]+$/i, '') + '.jpg', type: 'image/jpeg', data: data, lastModified: f.lastModified, shotTime: tm.t, timeSource: tm.src };
     } catch (e) {
-      return { name: f.name, type: f.type, data: await read(f), lastModified: f.lastModified };   // 変換できなければそのまま
+      return { name: f.name, type: f.type, data: await read(f), lastModified: f.lastModified, shotTime: tm.t, timeSource: tm.src };   // 変換できなければそのまま
     }
   }
   // いくつかずつ同時に送る
@@ -323,6 +394,8 @@
       say($('upMsg'), '送信中…（' + files.length + '枚）');
       const results = await call('uploadShots', PASS, packed);
       const names = results.map(r => r.name), ids = results.map(r => r.id).filter(Boolean);
+      const srcs = Array.from(new Set(packed.map(p => p.timeSource || 'name')));
+      TIME_NOTE = '撮影時刻は「' + srcs.map(x => SRC_TEXT[x] || x).join('・') + '」から決めました。';
       say($('upMsg'), '読み取り中…（30秒ほどかかります）');
       const r = await call('uploadProcess', PASS, ids, names);
       if (!r.ok) return end('画像は受け取りました。<br>' + esc(r.msg));
@@ -411,7 +484,7 @@
     d.appendChild(box);
   }
 
-  function end(html) { step(3); show('pageEnd'); $('endMsg').innerHTML = html; }
+  function end(html) { step(3); show('pageEnd'); $('endMsg').innerHTML = html + (TIME_NOTE ? '<div class="note" style="margin-top:10px">' + esc(TIME_NOTE) + '</div>' : ''); }
   $('finish').onclick = () => end(LEFT > 0 ? '残りの' + LEFT + '人は、あとで管理者が登録します。ありがとう！' : '知らない名前を全部登録しました。ありがとう！');
   $('again').onclick = () => { step(1); show('pageUp'); $('files').value = ''; setPickText(); say($('upMsg'), ''); };
   $('toView').onclick = () => { tab('view'); loadView(''); $('again').onclick(); };
