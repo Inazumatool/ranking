@@ -392,7 +392,7 @@
       say($('upMsg'), '画像を準備中…');
       const packed = await pool(files, 3, f => shrink(f));
       say($('upMsg'), '送信中…（' + files.length + '枚）');
-      const results = await call('uploadShots', PASS, packed);
+      const results = await call('uploadShots', PASS, packed, WHO);
       const names = results.map(r => r.name), ids = results.map(r => r.id).filter(Boolean);
       const srcs = Array.from(new Set(packed.map(p => p.timeSource || 'name')));
       TIME_NOTE = '撮影時刻は「' + srcs.map(x => SRC_TEXT[x] || x).join('・') + '」から決めました。';
