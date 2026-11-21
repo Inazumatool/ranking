@@ -149,7 +149,7 @@
 <script>
   const $ = id => document.getElementById(id);
   const MAX = 12;
-  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '', CHART_ON = false;
+  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '', CHART_ON = false, TP0 = 0; // TP0：合言葉を送った時刻（最初の表はここから測る）
   try { RANGE = localStorage.getItem('range') || 'all'; } catch (e) {}
   try { FOCUS = localStorage.getItem('focus') || ''; } catch (e) {}
   try { $('pass').value = localStorage.getItem('pass') || ''; $('me').value = localStorage.getItem('me') || ''; } catch (e) {}
@@ -275,7 +275,9 @@
     if (!PASS) return say($('passMsg'), '合言葉を入れてください', 'ng');
     $('enter').disabled = true;
     try {
-      const tp = performance.now();
+      const tp = performance.now(); TP0 = tp;
+      // 合言葉の確認と最初の表を同時に頼む（順番に頼むと、通信の待ちが2回分かかるため）
+      const firstView = call('viewDashboard', PASS, '', FOCUS, '', {}, 'table').then(d => ({ d: d }), e => ({ e: e }));
       const r = await call('uploadCheckPassword', PASS);
       if (!r) return say($('passMsg'), '合言葉が違います', 'ng');
       TIMES['合言葉'] = '合言葉 ' + sec(performance.now() - tp);
@@ -287,7 +289,7 @@
       setPickText();
       $('tView').classList.toggle('hide', !SITE.canView); $('tUp').classList.toggle('hide', !SITE.canUp);
       $('passBox').classList.add('hide'); $('main').classList.remove('hide');
-      if (SITE.canView) { tab('view'); loadView(''); }
+      if (SITE.canView) { tab('view'); loadView('', '', firstView); }
       else if (SITE.canUp) tab('up');
       else { $('main').innerHTML = '<div class="card">今はお休み中です。</div>'; }
     } catch (e) { say($('passMsg'), '失敗しました：' + errText(e), 'ng'); }
@@ -328,12 +330,14 @@
     TIMES[kind] = s;
     $('vTime').textContent = ['合言葉', '表', 'グラフ'].filter(k => TIMES[k]).map(k => TIMES[k]).join('　／　');
   }
-  async function loadView(day, season) {
+  async function loadView(day, season, pre) {
     DAY = day;
-    const t0 = performance.now();
+    const t0 = pre ? TP0 : performance.now();
     $('vSeason').textContent = '読み込み中…'; $('reload').disabled = true; $('vFocus').disabled = true;
     try {
-      const d = await call('viewDashboard', PASS, day, FOCUS, season || '', {}, 'table'); // 表だけ先に（グラフはボタンで）
+      let d;
+      if (pre) { const x = await pre; if (x.e) throw x.e; d = x.d; } // 合言葉と同時に頼んでおいた分
+      else d = await call('viewDashboard', PASS, day, FOCUS, season || '', {}, 'table'); // 表だけ先に（グラフはボタンで）
       noteTime('表', t0, d);
       if (d.seasons) $('vSeasonSel').innerHTML = d.seasons.map(x => '<option' + (x === (d.season || season) ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
       if (!d.ok) {
