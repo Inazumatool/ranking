@@ -270,7 +270,7 @@
   }
   function setFocus(name) {
     FOCUS = name; try { localStorage.setItem('focus', name); } catch (e) {}
-    loadView(DAY);
+    loadView(DAY_SHOWN || DAY);   // 今見ている日（シーズン）のまま、注目する人だけ変える
   }
   $('vFocus').onchange = () => setFocus($('vFocus').value);
   $('vRows').onclick = e => { const tr = e.target.closest('tr'); if (tr && tr.dataset.name) setFocus(tr.dataset.name); };
