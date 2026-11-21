@@ -111,6 +111,7 @@
         <img id="vChart" alt="" class="hide"></div>
       <div class="card pred"><h2>最終日の予想（直線の目安）</h2><div id="vPred"></div></div>
       <div class="card sched"><h2>日程</h2><div id="vSched"></div></div>
+      <div id="vTime" class="info" style="font-size:11px;margin-top:6px"></div>
       <button id="reload" class="sub">最新にする</button>
     </div>
 
@@ -274,8 +275,10 @@
     if (!PASS) return say($('passMsg'), '合言葉を入れてください', 'ng');
     $('enter').disabled = true;
     try {
+      const tp = performance.now();
       const r = await call('uploadCheckPassword', PASS);
       if (!r) return say($('passMsg'), '合言葉が違います', 'ng');
+      TIMES['合言葉'] = '合言葉 ' + sec(performance.now() - tp);
       SITE = r === true ? { canView: true, canUp: true } : r;
       try { localStorage.setItem('pass', PASS); } catch (e) {}
       if (SITE.title) { $('title').textContent = SITE.title; document.title = SITE.title; }
@@ -308,11 +311,30 @@
     const n = Number(v), cls = n > 0 ? 'plus' : n < 0 ? 'minus' : '';
     return '<td><span class="' + cls + (flag === 'Y' ? ' q' : '') + '">' + (n > 0 ? '+' : '') + esc(v) + '</span></td>';
   }
+  // 読み込みにかかった時間（遅いときに、どこが遅いか見るため）
+  const TIMES = {};
+  function sec(x) { return (x / 1000).toFixed(1) + '秒'; }
+  function noteTime(kind, t0, d) {
+    const all = performance.now() - t0, m = (d && d.ms) || {};
+    let s = kind + ' ' + sec(all);
+    if (m.cache) s += '（前の表示を使い回し・サーバー ' + sec(m.total) + '）';
+    else if (m.total != null) {
+      const parts = ['サーバー ' + sec(m.total), '準備 ' + sec(m.prep || 0)];
+      if (m.wait > 300) parts.push('順番待ち ' + sec(m.wait));
+      if (kind === 'グラフ') parts.push('画像 ' + sec(m.chart || 0)); else parts.push('シート ' + sec(m.calc || 0));
+      if (m.changed) parts.push('元に戻す ' + sec(m.back || 0));
+      s += '（' + parts.join('・') + '）';
+    }
+    TIMES[kind] = s;
+    $('vTime').textContent = ['合言葉', '表', 'グラフ'].filter(k => TIMES[k]).map(k => TIMES[k]).join('　／　');
+  }
   async function loadView(day, season) {
     DAY = day;
+    const t0 = performance.now();
     $('vSeason').textContent = '読み込み中…'; $('reload').disabled = true; $('vFocus').disabled = true;
     try {
       const d = await call('viewDashboard', PASS, day, FOCUS, season || '', {}, 'table'); // 表だけ先に（グラフはボタンで）
+      noteTime('表', t0, d);
       if (d.seasons) $('vSeasonSel').innerHTML = d.seasons.map(x => '<option' + (x === (d.season || season) ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
       if (!d.ok) {
         $('vSeason').textContent = d.msg;
@@ -376,8 +398,10 @@
     const seq = ++CHART_SEQ, day = DAY_SHOWN;
     $('gShow').disabled = true; $('gShow').textContent = 'グラフを作っています…'; $('gShow').classList.remove('hide');
     try {
+      const t0 = performance.now();
       const d = await call('viewDashboard', PASS, day, FOCUS, '', graphRange(day), 'chart');
       if (seq !== CHART_SEQ) return; // 途中で別のグラフを頼んだときは、古い方を捨てる
+      noteTime('グラフ', t0, d);
       CHART_ON = true;
       $('vChart').src = d.chart ? 'data:image/png;base64,' + d.chart : '';
       $('vChart').classList.toggle('hide', !d.chart);
