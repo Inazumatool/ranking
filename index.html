@@ -169,17 +169,17 @@
     return new Promise((ok, ng) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = ng; r.readAsDataURL(f); });
   }
   function errText(e) { return (e && e.message) || String(e); }
-  // 送る前に画像を軽くする：幅は最大1080px、JPEG（画質0.85）に。文字の読み取りには十分で、大きさは数分の一になる
+  // 送る前に画像を軽くする：幅は最大900px、JPEG（画質0.8）に。文字の読み取りには十分で、大きさは数分の一になる
   async function shrink(f) {
     try {
       const url = URL.createObjectURL(f);
       const img = await new Promise((ok, ng) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ng; i.src = url; });
-      const k = Math.min(1, 1080 / img.naturalWidth);
+      const k = Math.min(1, 900 / img.naturalWidth);
       const c = document.createElement('canvas');
       c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      const data = c.toDataURL('image/jpeg', 0.85).split(',')[1];
+      const data = c.toDataURL('image/jpeg', 0.8).split(',')[1];
       return { name: String(f.name || 'image').replace(/[.][a-z0-9]+$/i, '') + '.jpg', type: 'image/jpeg', data: data, lastModified: f.lastModified };
     } catch (e) {
       return { name: f.name, type: f.type, data: await read(f), lastModified: f.lastModified };   // 変換できなければそのまま
@@ -318,13 +318,10 @@
     $('go').disabled = true;
     try {
       try { localStorage.setItem('me', WHO); } catch (e) {}
-      let n = 0;
-      say($('upMsg'), '送信中… 0 / ' + files.length);
-      const results = await pool(files, 3, async f => {
-        const res = await call('uploadShot', PASS, await shrink(f));
-        say($('upMsg'), '送信中… ' + (++n) + ' / ' + files.length);
-        return res;
-      });
+      say($('upMsg'), '画像を準備中…');
+      const packed = await pool(files, 3, f => shrink(f));
+      say($('upMsg'), '送信中…（' + files.length + '枚）');
+      const results = await call('uploadShots', PASS, packed);
       const names = results.map(r => r.name), ids = results.map(r => r.id).filter(Boolean);
       say($('upMsg'), '読み取り中…（30秒ほどかかります）');
       const r = await call('uploadProcess', PASS, ids, names);
