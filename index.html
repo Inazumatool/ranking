@@ -36,6 +36,9 @@
   .who .st { font-size: 13px; margin-top: 6px; }
   .who.done { background: #f1faf3; border-color: #bfe3c8; }
   .who button { margin-top: 8px; font-size: 15px; padding: 10px; }
+  .idbox { font-family: "Roboto Mono", "SFMono-Regular", Menlo, Consolas, monospace; font-size: 22px; letter-spacing: 2px; font-weight: bold; color: var(--ink); background: #f4f6fb; border-radius: 8px; padding: 6px 10px; margin: 6px 0 4px; display: block; width: fit-content; font-variant-numeric: slashed-zero; }
+  .fix { margin-top: 6px; } .fix summary { font-size: 12px; color: var(--main); cursor: pointer; }
+  .fix input { margin-top: 6px; font-family: monospace; text-transform: uppercase; }
   .big { font-size: 40px; text-align: center; margin: 6px 0; }
   .exbox { margin: 4px 0 10px; }
   .exbox summary { font-size: 13px; color: var(--main); cursor: pointer; }
@@ -126,7 +129,8 @@
       <div id="pageWho" class="card hide">
         <div id="whoHead" class="msg"></div>
         <div id="whoList"></div>
-        <button id="finish" class="sub">ここでおわる</button>
+        <div id="allDone" class="msg ok hide">全員登録できました。IDを確かめたら「おわる」を押してください。</div>
+        <button id="finish" class="sub">おわる</button>
       </div>
       <div id="pageEnd" class="card hide">
         <div class="big">✅</div>
@@ -331,7 +335,7 @@
   };
 
   function showWho(list, count) {
-    step(2); show('pageWho'); LEFT = list.length;
+    step(2); show('pageWho'); LEFT = list.length; $('allDone').classList.add('hide');
     $('whoHead').innerHTML = count + '人ぶん読み取りました。<br><b>IDの分からない名前が' + list.length + '人</b>います。<br>ゲームのランキングでその人をタップしてプロフィールを開き、<b>ユーザーIDが写った画面</b>のスクショを上げてください。';
     const box = $('whoList'); box.innerHTML = '';
     list.forEach(u => {
@@ -348,23 +352,46 @@
 
   async function sendProfile(d, st, u, f, force) {
     st.textContent = '読み取り中…'; st.className = 'st';
-    const old = d.querySelector('button'); if (old) old.remove();
+    d.querySelectorAll('button, .fix').forEach(x => x.remove());
     try {
       const r = await call('uploadProfile', PASS, await shrink(f), { name: u.name, team: u.team }, WHO, force);
-      if (r.ok) {
-        st.textContent = '✓ ' + r.msg + '（ID ' + r.id + '）'; st.className = 'st ok';
-        d.classList.add('done'); const p = d.querySelector('.pick'); if (p) p.remove();
-        if (--LEFT <= 0) end('知らない名前を全部登録しました。ありがとう！');
-      } else if (r.mismatch) {
+      if (r.ok) done(d, st, u, r);
+      else if (r.mismatch) {
         st.textContent = r.msg; st.className = 'st warn';
         const b = document.createElement('button'); b.textContent = 'この人で合っている（登録する）';
         b.onclick = () => sendProfile(d, st, u, f, true); d.appendChild(b);
-      } else { st.textContent = r.msg; st.className = 'st ng'; }
+      } else { st.textContent = r.msg; st.className = 'st ng'; idForm(d, st, u, '', '読み取れないときは、IDを手で入れて登録'); }
     } catch (e) { st.textContent = '失敗：' + errText(e); st.className = 'st ng'; }
+  }
+  // 登録できたら、読んだIDを大きく見せて確かめてもらう（違っていたら直せる）
+  function done(d, st, u, r) {
+    const first = !d.classList.contains('done');
+    st.innerHTML = '✓ ' + esc(r.msg) + '<div class="idbox">' + esc(r.id) + '</div><span class="note">ゲームの画面のIDと同じか確かめてください（英字のOは使われないので、丸い文字は数字の0です）</span>';
+    st.className = 'st ok';
+    d.classList.add('done'); const p = d.querySelector('.pick'); if (p) p.remove();
+    d.querySelectorAll('.fix').forEach(x => x.remove());
+    idForm(d, st, u, r.id, 'IDが違うときは直す');
+    if (first && --LEFT <= 0) $('allDone').classList.remove('hide');
+  }
+  function idForm(d, st, u, fromId, label) {
+    const box = document.createElement('details'); box.className = 'fix';
+    box.innerHTML = '<summary></summary><input type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例：3FZ5R0F47M"><button class="sub">このIDにする</button>';
+    box.querySelector('summary').textContent = label;
+    const inp = box.querySelector('input'), b = box.querySelector('button');
+    if (!fromId) box.open = true;
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const r = await call('uploadSetId', PASS, { name: u.name, team: u.team }, fromId, inp.value, WHO);
+        if (r.ok) done(d, st, u, r); else { st.textContent = r.msg; st.className = 'st ng'; }
+      } catch (e) { st.textContent = '失敗：' + errText(e); st.className = 'st ng'; }
+      finally { b.disabled = false; }
+    };
+    d.appendChild(box);
   }
 
   function end(html) { step(3); show('pageEnd'); $('endMsg').innerHTML = html; }
-  $('finish').onclick = () => end(LEFT > 0 ? '残りの' + LEFT + '人は、あとで管理者が登録します。ありがとう！' : 'ありがとう！');
+  $('finish').onclick = () => end(LEFT > 0 ? '残りの' + LEFT + '人は、あとで管理者が登録します。ありがとう！' : '知らない名前を全部登録しました。ありがとう！');
   $('again').onclick = () => { step(1); show('pageUp'); $('files').value = ''; setPickText(); say($('upMsg'), ''); };
   $('toView').onclick = () => { tab('view'); loadView(''); $('again').onclick(); };
 </script>
