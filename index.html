@@ -400,6 +400,7 @@
       const r = await call('uploadProcess', PASS, ids, names);
       if (!r.ok) return end('画像は受け取りました。<br>' + esc(r.msg));
       if (!r.count) return end('画像は受け取りました。<br>ランキングの行が読み取れませんでした（ランキング画面の画像か確認してください）。');
+      if (r.timing) TIME_NOTE += '　かかった時間：画像の読み取り ' + r.timing.read + '秒・シートの更新 ' + r.timing.sheet + '秒・名前の確認 ' + r.timing.names + '秒' + (r.timing.wait > 1 ? '・順番待ち ' + r.timing.wait + '秒' : '');
       if (!r.unknown.length) return end(r.count + '人ぶん読み取りました。<br>知らない名前はありませんでした。おわりです！');
       showWho(r.unknown, r.count);
     } catch (e) {
