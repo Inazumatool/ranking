@@ -107,7 +107,8 @@
           <option value="all">シーズン全体</option><option value="3">最近3日</option><option value="5">最近5日</option><option value="7">最近7日</option><option value="custom">日付を選ぶ</option>
         </select></div>
         <div id="gCustom" class="head hide" style="margin-bottom:8px"><select id="gFrom"></select><span>〜</span><select id="gTo"></select></div>
-        <img id="vChart" alt=""></div>
+        <button id="gShow" class="sub">グラフを表示</button>
+        <img id="vChart" alt="" class="hide"></div>
       <div class="card pred"><h2>最終日の予想（直線の目安）</h2><div id="vPred"></div></div>
       <div class="card sched"><h2>日程</h2><div id="vSched"></div></div>
       <button id="reload" class="sub">最新にする</button>
@@ -147,7 +148,7 @@
 <script>
   const $ = id => document.getElementById(id);
   const MAX = 12;
-  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '';
+  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '', CHART_ON = false;
   try { RANGE = localStorage.getItem('range') || 'all'; } catch (e) {}
   try { FOCUS = localStorage.getItem('focus') || ''; } catch (e) {}
   try { $('pass').value = localStorage.getItem('pass') || ''; $('me').value = localStorage.getItem('me') || ''; } catch (e) {}
@@ -311,7 +312,7 @@
     DAY = day;
     $('vSeason').textContent = '読み込み中…'; $('reload').disabled = true; $('vFocus').disabled = true;
     try {
-      const d = await call('viewDashboard', PASS, day, FOCUS, season || '', graphRange(day));
+      const d = await call('viewDashboard', PASS, day, FOCUS, season || '', {}, 'table'); // 表だけ先に（グラフはボタンで）
       if (d.seasons) $('vSeasonSel').innerHTML = d.seasons.map(x => '<option' + (x === (d.season || season) ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
       if (!d.ok) {
         $('vSeason').textContent = d.msg;
@@ -335,8 +336,8 @@
       const opts = sel => SDAYS.map(x => '<option' + (x === sel ? ' selected' : '') + ' value="' + x + '">' + esc(x.slice(5)) + '</option>').join('');
       $('gFrom').innerHTML = opts(CFROM || SDAYS[0]); $('gTo').innerHTML = opts(CTO || d.day);
       $('gCustom').classList.toggle('hide', RANGE !== 'custom');
-      $('vChart').src = d.chart ? 'data:image/png;base64,' + d.chart : '';
-      $('vChart').parentNode.classList.toggle('hide', !d.chart);
+      $('vChart').parentNode.classList.remove('hide');
+      if (CHART_ON) loadChart(); // 一度グラフを開いた人には、日や注目する人を変えたときもグラフを出す
       $('vPred').innerHTML = d.pred.map(p => '<div><span>' + esc(p.label) + '</span><span>' + esc(p.mid) + '（' + esc(p.low) + '〜' + esc(p.high) + '）</span></div>').join('');
       let today = false;
       $('vSched').innerHTML = d.schedule.map(s => {
@@ -365,9 +366,28 @@
   }
   let DAY_SHOWN = '';
   $('gRange').onchange = () => { RANGE = $('gRange').value; try { localStorage.setItem('range', RANGE); } catch (e) {}
-    if (RANGE === 'custom') { $('gCustom').classList.remove('hide'); CFROM = $('gFrom').value; CTO = $('gTo').value; }
-    loadView(DAY_SHOWN); };
-  $('gFrom').onchange = $('gTo').onchange = () => { CFROM = $('gFrom').value; CTO = $('gTo').value; loadView(DAY_SHOWN); };
+    $('gCustom').classList.toggle('hide', RANGE !== 'custom');
+    if (RANGE === 'custom') { CFROM = $('gFrom').value; CTO = $('gTo').value; }
+    if (CHART_ON) loadChart(); };
+  $('gFrom').onchange = $('gTo').onchange = () => { CFROM = $('gFrom').value; CTO = $('gTo').value; if (CHART_ON) loadChart(); };
+  // グラフ：ボタンを押したときだけ作る（作るのに数秒かかるため）
+  let CHART_SEQ = 0;
+  async function loadChart() {
+    const seq = ++CHART_SEQ, day = DAY_SHOWN;
+    $('gShow').disabled = true; $('gShow').textContent = 'グラフを作っています…'; $('gShow').classList.remove('hide');
+    try {
+      const d = await call('viewDashboard', PASS, day, FOCUS, '', graphRange(day), 'chart');
+      if (seq !== CHART_SEQ) return; // 途中で別のグラフを頼んだときは、古い方を捨てる
+      CHART_ON = true;
+      $('vChart').src = d.chart ? 'data:image/png;base64,' + d.chart : '';
+      $('vChart').classList.toggle('hide', !d.chart);
+      $('gShow').classList.add('hide');
+    } catch (e) {
+      if (seq !== CHART_SEQ) return;
+      $('gShow').textContent = 'グラフを作れませんでした（もう一度押す）';
+    } finally { if (seq === CHART_SEQ) $('gShow').disabled = false; }
+  }
+  $('gShow').onclick = loadChart;
   $('reload').onclick = () => loadView('');
 
   // ===== 上げる =====
