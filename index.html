@@ -37,6 +37,9 @@
   .who.done { background: #f1faf3; border-color: #bfe3c8; }
   .who button { margin-top: 8px; font-size: 15px; padding: 10px; }
   .idbox { font-family: "Roboto Mono", "SFMono-Regular", Menlo, Consolas, monospace; font-size: 22px; letter-spacing: 2px; font-weight: bold; color: var(--ink); background: #f4f6fb; border-radius: 8px; padding: 6px 10px; margin: 6px 0 4px; display: block; width: fit-content; font-variant-numeric: slashed-zero; }
+  .cands button.cand { display: block; text-align: left; background: #eef3fd; color: var(--ink); border: 1px solid #c9d8f5; margin-top: 8px; padding: 10px 12px; }
+  .cands .cn { display: block; font-weight: bold; font-size: 15px; }
+  .cands .cw { display: block; font-size: 12px; color: var(--sub); margin-top: 2px; }
   .fix { margin-top: 6px; } .fix summary { font-size: 12px; color: var(--main); cursor: pointer; }
   .fix input { margin-top: 6px; font-family: monospace; text-transform: uppercase; }
   .big { font-size: 40px; text-align: center; margin: 6px 0; }
@@ -336,15 +339,36 @@
 
   function showWho(list, count) {
     step(2); show('pageWho'); LEFT = list.length; $('allDone').classList.add('hide');
-    $('whoHead').innerHTML = count + '人ぶん読み取りました。<br><b>IDの分からない名前が' + list.length + '人</b>います。<br>ゲームのランキングでその人をタップしてプロフィールを開き、<b>ユーザーIDが写った画面</b>のスクショを上げてください。';
+    $('whoHead').innerHTML = count + '人ぶん読み取りました。<br><b>IDの分からない名前が' + list.length + '人</b>います。<br>候補に合う人がいれば押してください。いなければ、ゲームのランキングでその人をタップしてプロフィールを開き、<b>ユーザーIDが写った画面</b>のスクショを上げてください。';
     const box = $('whoList'); box.innerHTML = '';
     list.forEach(u => {
       const d = document.createElement('div'); d.className = 'who';
-      d.innerHTML = '<div class="top"><span class="nm"></span><span class="meta"></span></div><div class="st">プロフィール画像を待っています</div>'
-        + '<label class="pick" style="margin-top:8px;padding:12px"><input type="file" accept="image/*"><b>プロフィール画像を選ぶ</b></label>';
+      const cands = u.cands || [];
+      d.innerHTML = '<div class="top"><span class="nm"></span><span class="meta"></span></div>'
+        + '<div class="st">' + (cands.length ? 'この人かも？　合っていれば押してください' : 'プロフィール画像を待っています') + '</div>'
+        + '<div class="cands"></div>'
+        + '<div class="note" style="margin-top:8px">' + (cands.length ? '候補にいない（新しい人）ときは、プロフィール画像で登録：' : '') + '</div>'
+        + '<label class="pick" style="margin-top:4px;padding:12px"><input type="file" accept="image/*"><b>プロフィール画像を選ぶ</b></label>';
       d.querySelector('.nm').textContent = u.name;
       d.querySelector('.meta').textContent = u.rank + '位・' + u.points + (u.team ? '・' + u.team : '');
       const st = d.querySelector('.st'), inp = d.querySelector('input');
+      const cbox = d.querySelector('.cands');
+      cands.forEach(c => {
+        const b = document.createElement('button'); b.className = 'cand';
+        b.innerHTML = '<span class="cn"></span><span class="cw"></span>';
+        b.querySelector('.cn').textContent = c.name + (c.team ? '（' + c.team + '）' : '');
+        b.querySelector('.cw').textContent = c.why;
+        b.onclick = async () => {
+          if (!confirm('「' + u.name + '」は「' + c.name + '」で合っていますか？')) return;
+          cbox.querySelectorAll('button').forEach(x => x.disabled = true);
+          try {
+            const r = await call('uploadSetId', PASS, { name: u.name, team: u.team }, '', c.id, WHO, 'pick');
+            if (r.ok) { cbox.remove(); const n = d.querySelector('.note'); if (n) n.remove(); done(d, st, u, r); }
+            else { st.textContent = r.msg; st.className = 'st ng'; cbox.querySelectorAll('button').forEach(x => x.disabled = false); }
+          } catch (e) { st.textContent = '失敗：' + errText(e); st.className = 'st ng'; cbox.querySelectorAll('button').forEach(x => x.disabled = false); }
+        };
+        cbox.appendChild(b);
+      });
       inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) sendProfile(d, st, u, f, false); inp.value = ''; };
       box.appendChild(d);
     });
@@ -369,7 +393,7 @@
     st.innerHTML = '✓ ' + esc(r.msg) + '<div class="idbox">' + esc(r.id) + '</div><span class="note">ゲームの画面のIDと同じか確かめてください（英字のOは使われないので、丸い文字は数字の0です）</span>';
     st.className = 'st ok';
     d.classList.add('done'); const p = d.querySelector('.pick'); if (p) p.remove();
-    d.querySelectorAll('.fix').forEach(x => x.remove());
+    d.querySelectorAll('.fix, .cands, .note:not(.st .note)').forEach(x => x.remove());
     idForm(d, st, u, r.id, 'IDが違うときは直す');
     if (first && --LEFT <= 0) $('allDone').classList.remove('hide');
   }
