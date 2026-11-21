@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ランキング</title>
+<style>
+  :root { --bg:#f2f4f9; --card:#fff; --ink:#1b1c20; --sub:#6b7080; --line:#dde1ea; --main:#1f5fd6; --ok:#1a7f37; --ng:#c62828; --warn:#b26a00; --me:#fdecea; --border:#1b1c20; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; margin: 0; padding: 16px; background: var(--bg); color: var(--ink); }
+  .wrap { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 4px 0 12px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button { flex: 1; margin: 0; font-size: 15px; padding: 10px; background: #e4e8f1; color: var(--ink); }
+  .tabs button.on { background: var(--main); color: #fff; font-weight: bold; }
+  .steps { display: flex; gap: 6px; margin-bottom: 12px; }
+  .steps div { flex: 1; text-align: center; font-size: 12px; padding: 6px 0; border-radius: 999px; background: #e4e8f1; color: var(--sub); }
+  .steps div.on { background: var(--main); color: #fff; font-weight: bold; }
+  .card { background: var(--card); border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.07); margin-bottom: 12px; }
+  label { display: block; font-size: 13px; margin: 12px 0 4px; color: var(--sub); }
+  input[type=text], select { width: 100%; font-size: 16px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .secret { -webkit-text-security: disc; }
+  .show { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .pick { display: block; border: 2px dashed var(--line); border-radius: 12px; padding: 18px; text-align: center; color: var(--sub); }
+  .pick b { color: var(--main); }
+  .pick input { display: none; }
+  button { width: 100%; font-size: 17px; padding: 13px; border: 0; border-radius: 10px; background: var(--main); color: #fff; margin-top: 14px; }
+  button.sub { background: #e4e8f1; color: var(--ink); }
+  button:disabled { opacity: .5; }
+  .note { font-size: 12px; color: var(--sub); margin-top: 8px; line-height: 1.5; }
+  .msg { font-size: 14px; margin-top: 10px; line-height: 1.6; }
+  .ok { color: var(--ok); } .ng { color: var(--ng); } .warn { color: var(--warn); }
+  .who { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 10px; }
+  .who .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .who .nm { font-weight: bold; font-size: 16px; word-break: break-all; }
+  .who .meta { font-size: 12px; color: var(--sub); white-space: nowrap; }
+  .who .st { font-size: 13px; margin-top: 6px; }
+  .who.done { background: #f1faf3; border-color: #bfe3c8; }
+  .who button { margin-top: 8px; font-size: 15px; padding: 10px; }
+  .big { font-size: 40px; text-align: center; margin: 6px 0; }
+  .hide { display: none !important; }
+  .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .head select { width: auto; flex: 1; }
+  .head { gap: 8px; }
+  .meline { font-weight: bold; color: #c62828; font-size: 16px; margin-top: 8px; }
+  .info { font-size: 12px; color: var(--sub); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+  th { font-size: 11px; color: var(--sub); font-weight: normal; text-align: right; padding: 4px 4px; border-bottom: 1px solid var(--line); }
+  th:nth-child(2) { text-align: left; }
+  td { padding: 7px 4px; border-bottom: 1px solid #eef0f5; text-align: right; font-variant-numeric: tabular-nums; }
+  td.nm { text-align: left; word-break: break-all; }
+  #vRows tr { cursor: pointer; }
+  td.rk { color: var(--sub); width: 2.2em; }
+  tr.me td { background: var(--me); font-weight: bold; }
+  tr.ten td { border-bottom: 2px solid var(--border); }
+  .plus { color: var(--ok); } .minus { color: var(--ng); }
+  .q { background: #fff3b0; border-radius: 4px; }
+  .legend { font-size: 11px; color: var(--sub); margin-top: 6px; }
+  .chart img { width: 100%; height: auto; display: block; border-radius: 8px; }
+  #vPred > div { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; border-bottom: 1px solid #eef0f5; }
+  .sched { font-size: 13px; }
+  #vSched > div { padding: 5px 0; gap: 8px; border-bottom: 1px solid #eef0f5; display: flex; justify-content: space-between; }
+  .sched .done { color: #9aa0ad; }
+  .sched .today { color: #c25b00; font-weight: bold; }
+  h2 { font-size: 15px; margin: 0 0 6px; }
+</style></head>
+<body><div class="wrap">
+  <h1 id="title">ランキング</h1>
+  <div id="notice" class="card hide" style="background:#fff8e1"></div>
+
+  <div id="passBox" class="card">
+    <label for="pass" style="margin-top:0">合言葉</label>
+    <input id="pass" type="text" class="secret" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label class="show"><input id="showPass" type="checkbox"> 合言葉を表示する</label>
+    <button id="enter">入る</button>
+    <div id="passMsg" class="msg"></div>
+  </div>
+
+  <div id="main" class="hide">
+    <div class="tabs"><button id="tView" class="on">ランキングを見る</button><button id="tUp">スクショを上げる</button></div>
+
+    <!-- 見る -->
+    <div id="view">
+      <div class="card">
+        <div class="head"><select id="vSeasonSel"></select><select id="vDay"></select></div>
+        <div id="vSeason" class="info"></div>
+        <label for="vFocus">注目する人（赤で表示・グラフも赤線）</label>
+        <select id="vFocus"></select>
+        <div id="vMe" class="meline"></div>
+        <div id="vInfo" class="info"></div>
+        <table><thead><tr><th>順位</th><th>名前</th><th>合計</th><th>当日</th><th>前日</th><th>前々日</th></tr></thead><tbody id="vRows"></tbody></table>
+        <div class="legend">名前を押すと、その人に注目します。太線＝10位のボーダー　赤＝注目する人　<span class="q">黄</span>＝夜の間に増えた分を、まだ前日・当日に振り分けていない</div>
+      </div>
+      <div class="card chart"><h2>ポイントの推移</h2><img id="vChart" alt=""></div>
+      <div class="card pred"><h2>最終日の予想（直線の目安）</h2><div id="vPred"></div></div>
+      <div class="card sched"><h2>日程</h2><div id="vSched"></div></div>
+      <button id="reload" class="sub">最新にする</button>
+    </div>
+
+    <!-- 上げる -->
+    <div id="up" class="hide">
+      <div class="steps"><div id="s1" class="on">1 ランキング</div><div id="s2">2 知らない名前</div><div id="s3">3 おわり</div></div>
+      <div id="pageUp" class="card">
+        <label for="me" style="margin-top:0">あなたの名前（任意・登録した人として残ります）</label>
+        <input id="me" type="text" maxlength="20" autocomplete="off">
+        <label>ランキングのスクショ</label>
+        <label class="pick"><input id="files" type="file" accept="image/*" multiple><b>画像を選ぶ</b><br><span id="picked">1〜18位が写った画像（何枚でも）</span></label>
+        <div class="note">画像の名前は変えずに、そのまま選んでください（撮った時刻を名前から読みます）。</div>
+        <button id="go">送信して読み取る</button>
+        <div id="upMsg" class="msg"></div>
+      </div>
+      <div id="pageWho" class="card hide">
+        <div id="whoHead" class="msg"></div>
+        <div id="whoList"></div>
+        <button id="finish" class="sub">ここでおわる</button>
+      </div>
+      <div id="pageEnd" class="card hide">
+        <div class="big">✅</div>
+        <div id="endMsg" class="msg" style="text-align:center"></div>
+        <button id="toView">ランキングを見る</button>
+        <button id="again" class="sub">もう一度上げる</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  const MAX = 12;
+  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {};
+  try { FOCUS = localStorage.getItem('focus') || ''; } catch (e) {}
+  try { $('pass').value = localStorage.getItem('pass') || ''; $('me').value = localStorage.getItem('me') || ''; } catch (e) {}
+  $('showPass').onchange = () => $('pass').classList.toggle('secret', !$('showPass').checked);
+
+  // サーバー（Apps Script のウェブアプリ）。デプロイし直してURLが変わったら、ここを書き換える
+  const API = 'https://script.google.com/macros/s/AKfycbyYmdi3hdkB61_6I-rB9oM39Aj6E4OCfpgh5uJEWtPWrjhpPkX1NyyhXYDoFAlzvwbTgQ/exec';
+  async function call(fn, ...args) {
+    let res;
+    try {
+      res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) });
+    } catch (e) { throw new Error('つながりませんでした。電波のよい所でもう一度どうぞ'); }
+    let j;
+    try { j = await res.json(); } catch (e) { throw new Error('サーバーの返事が読めませんでした'); }
+    if (j.err) throw new Error(j.err);
+    return j.r;
+  }
+  function read(f) {
+    return new Promise((ok, ng) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = ng; r.readAsDataURL(f); });
+  }
+  function errText(e) { return (e && e.message) || String(e); }
+  function say(el, text, cls) { el.textContent = text; el.className = 'msg ' + (cls || ''); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  // ===== 合言葉 =====
+  async function enter() {
+    PASS = $('pass').value.trim();
+    if (!PASS) return say($('passMsg'), '合言葉を入れてください', 'ng');
+    $('enter').disabled = true;
+    try {
+      const r = await call('uploadCheckPassword', PASS);
+      if (!r) return say($('passMsg'), '合言葉が違います', 'ng');
+      SITE = r === true ? { canView: true, canUp: true } : r;
+      try { localStorage.setItem('pass', PASS); } catch (e) {}
+      if (SITE.title) { $('title').textContent = SITE.title; document.title = SITE.title; }
+      if (SITE.notice) { $('notice').textContent = SITE.notice; $('notice').classList.remove('hide'); }
+      if (!FOCUS && SITE.focus) FOCUS = SITE.focus;
+      $('tView').classList.toggle('hide', !SITE.canView); $('tUp').classList.toggle('hide', !SITE.canUp);
+      $('passBox').classList.add('hide'); $('main').classList.remove('hide');
+      if (SITE.canView) { tab('view'); loadView(''); }
+      else if (SITE.canUp) tab('up');
+      else { $('main').innerHTML = '<div class="card">今はお休み中です。</div>'; }
+    } catch (e) { say($('passMsg'), '失敗しました：' + errText(e), 'ng'); }
+    finally { $('enter').disabled = false; }
+  }
+  $('enter').onclick = enter;
+  if ($('pass').value) enter();
+
+  // ===== タブ =====
+  function tab(which) {
+    $('tView').classList.toggle('on', which === 'view'); $('tUp').classList.toggle('on', which === 'up');
+    $('view').classList.toggle('hide', which !== 'view'); $('up').classList.toggle('hide', which !== 'up');
+    window.scrollTo(0, 0);
+  }
+  $('tView').onclick = () => tab('view');
+  $('tUp').onclick = () => tab('up');
+
+  // ===== 見る =====
+  function num(v, flag) {
+    if (v === '' || v == null) return '<td></td>';
+    const n = Number(v), cls = n > 0 ? 'plus' : n < 0 ? 'minus' : '';
+    return '<td><span class="' + cls + (flag === 'Y' ? ' q' : '') + '">' + (n > 0 ? '+' : '') + esc(v) + '</span></td>';
+  }
+  async function loadView(day, season) {
+    DAY = day;
+    $('vSeason').textContent = '読み込み中…'; $('reload').disabled = true; $('vFocus').disabled = true;
+    try {
+      const d = await call('viewDashboard', PASS, day, FOCUS, season || '');
+      if (d.seasons) $('vSeasonSel').innerHTML = d.seasons.map(x => '<option' + (x === (d.season || season) ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
+      if (!d.ok) {
+        $('vSeason').textContent = d.msg;
+        ['vRows', 'vPred', 'vSched', 'vDay', 'vFocus'].forEach(id => $(id).innerHTML = '');
+        $('vMe').textContent = ''; $('vInfo').textContent = ''; $('vChart').parentNode.classList.add('hide');
+        return;
+      }
+      $('vSeason').textContent = '';
+      $('vDay').innerHTML = d.days.map(x => '<option' + (x === d.day ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
+      $('vFocus').innerHTML = d.rows.map(r => '<option' + (r.name === d.meName ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('');
+      $('vMe').textContent = d.me || '';
+      $('vInfo').textContent = d.info || '';
+      $('vRows').innerHTML = d.rows.map(r => {
+        const f = r.flag || '---';
+        const cls = [r.name === d.meName ? 'me' : '', String(r.rank) === '10' ? 'ten' : ''].join(' ');
+        return '<tr class="' + cls + '" data-name="' + esc(r.name) + '"><td class="rk">' + esc(r.rank) + '</td><td class="nm">' + esc(r.name) + '</td><td>' + esc(r.total) + '</td>'
+          + num(r.d0, f[0]) + num(r.d1, f[1]) + num(r.d2, f[2]) + '</tr>';
+      }).join('');
+      $('vChart').src = d.chart ? 'data:image/png;base64,' + d.chart : '';
+      $('vChart').parentNode.classList.toggle('hide', !d.chart);
+      $('vPred').innerHTML = d.pred.map(p => '<div><span>' + esc(p.label) + '</span><span>' + esc(p.mid) + '（' + esc(p.low) + '〜' + esc(p.high) + '）</span></div>').join('');
+      let today = false;
+      $('vSched').innerHTML = d.schedule.map(s => {
+        const cls = s.done ? 'done' : (!today ? (today = true, 'today') : '');
+        return '<div class="' + cls + '"><span>' + esc(s.text) + '</span><span>' + (s.done ? '済' : cls === 'today' ? '今日' : '') + '</span></div>';
+      }).join('');
+    } catch (e) { $('vSeason').textContent = '読み込めませんでした：' + errText(e); }
+    finally { $('reload').disabled = false; $('vFocus').disabled = false; }
+  }
+  function setFocus(name) {
+    FOCUS = name; try { localStorage.setItem('focus', name); } catch (e) {}
+    loadView(DAY);
+  }
+  $('vFocus').onchange = () => setFocus($('vFocus').value);
+  $('vRows').onclick = e => { const tr = e.target.closest('tr'); if (tr && tr.dataset.name) setFocus(tr.dataset.name); };
+  $('vDay').onchange = () => loadView($('vDay').value);
+  $('vSeasonSel').onchange = () => loadView('', $('vSeasonSel').value);
+  $('reload').onclick = () => loadView('');
+
+  // ===== 上げる =====
+  function step(n) { [1, 2, 3].forEach(i => $('s' + i).className = i === n ? 'on' : ''); }
+  function show(id) { ['pageUp', 'pageWho', 'pageEnd'].forEach(p => $(p).classList.toggle('hide', p !== id)); window.scrollTo(0, 0); }
+  $('files').onchange = () => { const n = ($('files').files || []).length; $('picked').textContent = n ? n + '枚 選びました' : '1〜18位が写った画像（何枚でも）'; };
+
+  $('go').onclick = async () => {
+    const files = Array.from($('files').files || []);
+    WHO = $('me').value.trim();
+    if (!files.length) return say($('upMsg'), '画像を選んでください', 'ng');
+    if (files.length > MAX) return say($('upMsg'), '一度に送れるのは' + MAX + '枚までです', 'ng');
+    $('go').disabled = true;
+    try {
+      try { localStorage.setItem('me', WHO); } catch (e) {}
+      const ids = [], names = []; let n = 0;
+      for (const f of files) {
+        say($('upMsg'), '送信中… ' + (++n) + ' / ' + files.length);
+        const res = await call('uploadShot', PASS, { name: f.name, type: f.type, data: await read(f), lastModified: f.lastModified });
+        names.push(res.name); if (res.id) ids.push(res.id);
+      }
+      say($('upMsg'), '読み取り中…（30秒ほどかかります）');
+      const r = await call('uploadProcess', PASS, ids, names);
+      if (!r.ok) return end('画像は受け取りました。<br>' + esc(r.msg));
+      if (!r.count) return end('画像は受け取りました。<br>ランキングの行が読み取れませんでした（ランキング画面の画像か確認してください）。');
+      if (!r.unknown.length) return end(r.count + '人ぶん読み取りました。<br>知らない名前はありませんでした。おわりです！');
+      showWho(r.unknown, r.count);
+    } catch (e) {
+      say($('upMsg'), '失敗しました：' + errText(e), 'ng');
+    } finally { $('go').disabled = false; }
+  };
+
+  function showWho(list, count) {
+    step(2); show('pageWho'); LEFT = list.length;
+    $('whoHead').innerHTML = count + '人ぶん読み取りました。<br><b>IDの分からない名前が' + list.length + '人</b>います。<br>ゲームでその人のプロフィールを開いて、スクショを上げてください。';
+    const box = $('whoList'); box.innerHTML = '';
+    list.forEach(u => {
+      const d = document.createElement('div'); d.className = 'who';
+      d.innerHTML = '<div class="top"><span class="nm"></span><span class="meta"></span></div><div class="st">プロフィール画像を待っています</div>'
+        + '<label class="pick" style="margin-top:8px;padding:12px"><input type="file" accept="image/*"><b>プロフィール画像を選ぶ</b></label>';
+      d.querySelector('.nm').textContent = u.name;
+      d.querySelector('.meta').textContent = u.rank + '位・' + u.points + (u.team ? '・' + u.team : '');
+      const st = d.querySelector('.st'), inp = d.querySelector('input');
+      inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) sendProfile(d, st, u, f, false); inp.value = ''; };
+      box.appendChild(d);
+    });
+  }
+
+  async function sendProfile(d, st, u, f, force) {
+    st.textContent = '読み取り中…'; st.className = 'st';
+    const old = d.querySelector('button'); if (old) old.remove();
+    try {
+      const r = await call('uploadProfile', PASS, { name: f.name, type: f.type, data: await read(f) }, { name: u.name, team: u.team }, WHO, force);
+      if (r.ok) {
+        st.textContent = '✓ ' + r.msg + '（ID ' + r.id + '）'; st.className = 'st ok';
+        d.classList.add('done'); const p = d.querySelector('.pick'); if (p) p.remove();
+        if (--LEFT <= 0) end('知らない名前を全部登録しました。ありがとう！');
+      } else if (r.mismatch) {
+        st.textContent = r.msg; st.className = 'st warn';
+        const b = document.createElement('button'); b.textContent = 'この人で合っている（登録する）';
+        b.onclick = () => sendProfile(d, st, u, f, true); d.appendChild(b);
+      } else { st.textContent = r.msg; st.className = 'st ng'; }
+    } catch (e) { st.textContent = '失敗：' + errText(e); st.className = 'st ng'; }
+  }
+
+  function end(html) { step(3); show('pageEnd'); $('endMsg').innerHTML = html; }
+  $('finish').onclick = () => end(LEFT > 0 ? '残りの' + LEFT + '人は、あとで管理者が登録します。ありがとう！' : 'ありがとう！');
+  $('again').onclick = () => { step(1); show('pageUp'); $('files').value = ''; $('picked').textContent = '1〜18位が写った画像（何枚でも）'; say($('upMsg'), ''); };
+  $('toView').onclick = () => { tab('view'); loadView(''); $('again').onclick(); };
+</script>
+</body></html>
