@@ -89,13 +89,13 @@
 
   <div id="main" class="hide">
     <div class="tabs"><button id="tView" class="on">ランキングを見る</button><button id="tUp">スクショを上げる</button></div>
+    <div style="text-align:right;margin:-6px 0 8px"><span id="adminMark" class="hide" style="font-size:12px;color:var(--sub);margin-right:10px">管理者として表示中</span><a href="#" id="relogin" style="font-size:12px;color:var(--sub)">合言葉を変える</a></div>
 
     <!-- 見る -->
     <div id="view">
-      <div id="vLock" class="card hide"><h2>見るには、まず上げてください</h2>
-        <div id="lockMsg" class="note"></div>
-        <div class="note">今のランキングのスクショ（撮ってから3時間以内）を上げた人だけが見られます。上げると、次の朝5時まで見られます。最後の更新から時間がたっているときは、誰かが新しく上げるまで見られません。</div>
-        <button id="goUp" style="margin-top:10px">ランキングを上げる</button></div>
+      <div id="vLock" class="card hide"><h2 id="lockTitle">ランキングを見るには</h2>
+        <div id="lockMsg" style="line-height:1.7"></div>
+        <button id="goUp" style="margin-top:12px">スクショを上げる</button></div>
       <div class="card" id="vMain">
         <div class="head"><select id="vSeasonSel"></select><select id="vDay"></select></div>
         <div id="vSeason" class="info"></div>
@@ -153,7 +153,7 @@
 <script>
   const $ = id => document.getElementById(id);
   const MAX = 12;
-  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '', CHART_ON = false, TP0 = 0, TICKET = '', TICKET_UNTIL = ''; // TP0：合言葉を送った時刻（最初の表はここから測る）
+  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '', CHART_ON = false, TP0 = 0, TICKET = '', TICKET_UNTIL = '', TICKET_NOTE = '', DUP_NOTE = ''; // TP0：合言葉を送った時刻（最初の表はここから測る）
   try { RANGE = localStorage.getItem('range') || 'all'; } catch (e) {}
   try { FOCUS = localStorage.getItem('focus') || ''; } catch (e) {}
   try { TICKET = localStorage.getItem('ticket') || ''; TICKET_UNTIL = localStorage.getItem('ticketUntil') || ''; } catch (e) {}
@@ -292,6 +292,7 @@
       if (!r) return say($('passMsg'), '合言葉が違います', 'ng');
       TIMES['合言葉'] = '合言葉 ' + sec(performance.now() - tp);
       SITE = r === true ? { canView: true, canUp: true } : r;
+      $('adminMark').classList.toggle('hide', !SITE.admin);
       try { localStorage.setItem('pass', PASS); } catch (e) {}
       if (SITE.title) { $('title').textContent = SITE.title; document.title = SITE.title; }
       if (SITE.notice) { $('notice').textContent = SITE.notice; $('notice').classList.remove('hide'); }
@@ -349,12 +350,18 @@
       if (pre) { const x = await pre; if (x.e) throw x.e; d = x.d; } // 合言葉と同時に頼んでおいた分
       else d = await call('viewDashboard', PASS, day, FOCUS, season || '', {}, 'table', TICKET); // 表だけ先に（グラフはボタンで）
       noteTime('表', t0, d);
-      if (TICKET_UNTIL && !SITE.admin) TIMES['期限'] = '見られる期限 ' + TICKET_UNTIL;
+      if (TICKET_UNTIL && !SITE.admin) TIMES['期限'] = '見られる期限：' + TICKET_UNTIL;
       if (d.seasons) $('vSeasonSel').innerHTML = d.seasons.map(x => '<option' + (x === (d.season || season) ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
       $('vLock').classList.toggle('hide', !d.locked);
       $('vMain').classList.toggle('hide', !!d.locked);
       if (d.locked) { // 券がない・期限切れ・データが古い：上げてもらう
-        $('lockMsg').textContent = d.msg + (d.last ? '（最後の更新 ' + d.last + '）' : '');
+        if (d.stale) {
+          $('lockTitle').textContent = '最新のランキングが届いていません';
+          $('lockMsg').innerHTML = '最後の更新' + (d.last ? '（' + esc(d.last) + '）' : '') + 'から' + esc(d.staleH || 6) + '時間以上たっています。<br>いまのランキングを上げてくれると、みんなが見られるようになります。';
+        } else {
+          $('lockTitle').textContent = 'ランキングを見るには';
+          $('lockMsg').innerHTML = 'このページは、スクショを上げてくれた人だけが見られます。<br>いまのランキング画面を撮って上げると、次の朝5時まで見られるようになります。';
+        }
         ['vRows', 'vPred', 'vSched', 'vDay', 'vFocus'].forEach(id => $(id).innerHTML = '');
         $('vChart').parentNode.classList.add('hide');
         document.querySelectorAll('.card.pred, .card.sched').forEach(c => c.classList.add('hide'));
@@ -463,12 +470,29 @@
       const packed = await pool(files, 3, f => shrink(f));
       say($('upMsg'), '送信中…（' + files.length + '枚）');
       const results = await call('uploadShots', PASS, packed, WHO);
+      // 前に上げた画像（読み取り済み）は飛ばす。全部そうなら、ここで知らせて終わる
+      const old = results.filter(r => r.status === 'dup' && !r.id);
+      DUP_NOTE = '';
+      if (old.length) {
+        const w = old.find(r => r.when) || {};
+        const when = w.when ? '（' + esc(w.when) + (w.by ? ' に ' + esc(w.by) + ' さん' : '') + 'が上げた分）' : '';
+        if (old.length === results.length) {
+          TIME_NOTE = '';
+          return end('<b>この画像は、前に上げたものでした</b>' + when + '。<br>同じ画像は、もう一度読み取りません。<br>いまのランキング画面を撮り直して、もう一度上げてください。');
+        }
+        DUP_NOTE = '<div class="note" style="margin-top:8px">' + old.length + '枚は前に上げた画像だったので、飛ばしました' + when + '。</div>';
+      }
       const names = results.map(r => r.name), ids = results.map(r => r.id).filter(Boolean);
       const srcs = Array.from(new Set(packed.map(p => p.timeSource || 'name')));
       TIME_NOTE = '撮影時刻は「' + srcs.map(x => SRC_TEXT[x] || x).join('・') + '」から決めました。';
       say($('upMsg'), '読み取り中…（30秒ほどかかります）');
       const r = await call('uploadProcess', PASS, ids, names);
       saveTicket(r.ticket);
+      TICKET_NOTE = r.ticket && r.ticket.ticket
+        ? '<div class="msg ok" style="margin-top:10px"><b>' + esc(r.ticket.until) + ' まで</b>ランキングを見られます。</div>'
+        : r.ticket && r.ticket.none === 'old'
+          ? '<div class="msg ng" style="margin-top:10px">投稿された写真は撮ってから3時間以上たっていたため、見られるようにはなりません。<br>いまのランキング画面を撮り直して、もう一度上げてください。</div>'
+          : '';
       if (!r.ok) return end('画像は受け取りました。<br>' + esc(r.msg));
       if (!r.count) return end('画像は受け取りました。<br>ランキングの行が読み取れませんでした（ランキング画面の画像か確認してください）。');
       if (r.timing) TIME_NOTE += '　かかった時間：画像の読み取り ' + r.timing.read + '秒・シートの更新 ' + r.timing.sheet + '秒・名前の確認 ' + r.timing.names + '秒' + (r.timing.wait > 1 ? '・順番待ち ' + r.timing.wait + '秒' : '');
@@ -556,10 +580,23 @@
     d.appendChild(box);
   }
 
-  function end(html) { step(3); show('pageEnd'); $('endMsg').innerHTML = html + (TIME_NOTE ? '<div class="note" style="margin-top:10px">' + esc(TIME_NOTE) + '</div>' : ''); }
+  function end(html) {
+    step(3); show('pageEnd');
+    $('endMsg').innerHTML = html + DUP_NOTE + TICKET_NOTE + (TIME_NOTE ? '<div class="note" style="margin-top:10px">' + esc(TIME_NOTE) + '</div>' : '');
+    TICKET_NOTE = DUP_NOTE = '';
+  }
   $('finish').onclick = () => end(LEFT > 0 ? '残りの' + LEFT + '人は、あとで管理者が登録します。ありがとう！' : '知らない名前を全部登録しました。ありがとう！');
   $('again').onclick = () => { step(1); show('pageUp'); $('files').value = ''; setPickText(); say($('upMsg'), ''); };
   $('toView').onclick = () => { tab('view'); loadView(''); $('again').onclick(); };
   $('goUp').onclick = () => tab('up');
+  // 覚えている合言葉を消して、入力画面に戻る（管理用の合言葉で入り直すときなど）。見られる券は消さない
+  $('relogin').onclick = e => {
+    e.preventDefault();
+    try { localStorage.removeItem('pass'); } catch (err) {}
+    PASS = ''; $('pass').value = '';
+    $('main').classList.add('hide'); $('passBox').classList.remove('hide');
+    say($('passMsg'), '');
+    $('pass').focus();
+  };
 </script>
 </body></html>
