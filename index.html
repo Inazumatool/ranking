@@ -92,7 +92,11 @@
 
     <!-- 見る -->
     <div id="view">
-      <div class="card">
+      <div id="vLock" class="card hide"><h2>見るには、まず上げてください</h2>
+        <div id="lockMsg" class="note"></div>
+        <div class="note">今のランキングのスクショ（撮ってから3時間以内）を上げた人だけが見られます。上げると、次の朝5時まで見られます。最後の更新から時間がたっているときは、誰かが新しく上げるまで見られません。</div>
+        <button id="goUp" style="margin-top:10px">ランキングを上げる</button></div>
+      <div class="card" id="vMain">
         <div class="head"><select id="vSeasonSel"></select><select id="vDay"></select></div>
         <div id="vSeason" class="info"></div>
         <label for="vFocus">注目する人（赤で表示・グラフも赤線）</label>
@@ -149,9 +153,15 @@
 <script>
   const $ = id => document.getElementById(id);
   const MAX = 12;
-  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '', CHART_ON = false, TP0 = 0; // TP0：合言葉を送った時刻（最初の表はここから測る）
+  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '', CHART_ON = false, TP0 = 0, TICKET = '', TICKET_UNTIL = ''; // TP0：合言葉を送った時刻（最初の表はここから測る）
   try { RANGE = localStorage.getItem('range') || 'all'; } catch (e) {}
   try { FOCUS = localStorage.getItem('focus') || ''; } catch (e) {}
+  try { TICKET = localStorage.getItem('ticket') || ''; TICKET_UNTIL = localStorage.getItem('ticketUntil') || ''; } catch (e) {}
+  function saveTicket(t) { // 上げたときにもらった「見られる券」をこのブラウザに覚えておく
+    if (!t || !t.ticket) return;
+    TICKET = t.ticket; TICKET_UNTIL = t.until || '';
+    try { localStorage.setItem('ticket', TICKET); localStorage.setItem('ticketUntil', TICKET_UNTIL); } catch (e) {}
+  }
   try { $('pass').value = localStorage.getItem('pass') || ''; $('me').value = localStorage.getItem('me') || ''; } catch (e) {}
   $('showPass').onchange = () => $('pass').classList.toggle('secret', !$('showPass').checked);
 
@@ -277,7 +287,7 @@
     try {
       const tp = performance.now(); TP0 = tp;
       // 合言葉の確認と最初の表を同時に頼む（順番に頼むと、通信の待ちが2回分かかるため）
-      const firstView = call('viewDashboard', PASS, '', FOCUS, '', {}, 'table').then(d => ({ d: d }), e => ({ e: e }));
+      const firstView = call('viewDashboard', PASS, '', FOCUS, '', {}, 'table', TICKET).then(d => ({ d: d }), e => ({ e: e }));
       const r = await call('uploadCheckPassword', PASS);
       if (!r) return say($('passMsg'), '合言葉が違います', 'ng');
       TIMES['合言葉'] = '合言葉 ' + sec(performance.now() - tp);
@@ -328,7 +338,7 @@
       s += '（' + parts.join('・') + '）';
     }
     TIMES[kind] = s;
-    $('vTime').textContent = ['合言葉', '表', 'グラフ'].filter(k => TIMES[k]).map(k => TIMES[k]).join('　／　');
+    $('vTime').textContent = ['期限', '合言葉', '表', 'グラフ'].filter(k => TIMES[k]).map(k => TIMES[k]).join('　／　');
   }
   async function loadView(day, season, pre) {
     DAY = day;
@@ -337,9 +347,21 @@
     try {
       let d;
       if (pre) { const x = await pre; if (x.e) throw x.e; d = x.d; } // 合言葉と同時に頼んでおいた分
-      else d = await call('viewDashboard', PASS, day, FOCUS, season || '', {}, 'table'); // 表だけ先に（グラフはボタンで）
+      else d = await call('viewDashboard', PASS, day, FOCUS, season || '', {}, 'table', TICKET); // 表だけ先に（グラフはボタンで）
       noteTime('表', t0, d);
+      if (TICKET_UNTIL && !SITE.admin) TIMES['期限'] = '見られる期限 ' + TICKET_UNTIL;
       if (d.seasons) $('vSeasonSel').innerHTML = d.seasons.map(x => '<option' + (x === (d.season || season) ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
+      $('vLock').classList.toggle('hide', !d.locked);
+      $('vMain').classList.toggle('hide', !!d.locked);
+      if (d.locked) { // 券がない・期限切れ・データが古い：上げてもらう
+        $('lockMsg').textContent = d.msg + (d.last ? '（最後の更新 ' + d.last + '）' : '');
+        ['vRows', 'vPred', 'vSched', 'vDay', 'vFocus'].forEach(id => $(id).innerHTML = '');
+        $('vChart').parentNode.classList.add('hide');
+        document.querySelectorAll('.card.pred, .card.sched').forEach(c => c.classList.add('hide'));
+        if (pre) tab('up'); // 開いたときは、いきなり「上げる」画面にする
+        return;
+      }
+      document.querySelectorAll('.card.pred, .card.sched').forEach(c => c.classList.remove('hide'));
       if (!d.ok) {
         $('vSeason').textContent = d.msg;
         ['vRows', 'vPred', 'vSched', 'vDay', 'vFocus'].forEach(id => $(id).innerHTML = '');
@@ -403,7 +425,7 @@
     $('gShow').disabled = true; $('gShow').textContent = 'グラフを作っています…'; $('gShow').classList.remove('hide');
     try {
       const t0 = performance.now();
-      const d = await call('viewDashboard', PASS, day, FOCUS, '', graphRange(day), 'chart');
+      const d = await call('viewDashboard', PASS, day, FOCUS, '', graphRange(day), 'chart', TICKET);
       if (seq !== CHART_SEQ) return; // 途中で別のグラフを頼んだときは、古い方を捨てる
       noteTime('グラフ', t0, d);
       CHART_ON = true;
@@ -446,6 +468,7 @@
       TIME_NOTE = '撮影時刻は「' + srcs.map(x => SRC_TEXT[x] || x).join('・') + '」から決めました。';
       say($('upMsg'), '読み取り中…（30秒ほどかかります）');
       const r = await call('uploadProcess', PASS, ids, names);
+      saveTicket(r.ticket);
       if (!r.ok) return end('画像は受け取りました。<br>' + esc(r.msg));
       if (!r.count) return end('画像は受け取りました。<br>ランキングの行が読み取れませんでした（ランキング画面の画像か確認してください）。');
       if (r.timing) TIME_NOTE += '　かかった時間：画像の読み取り ' + r.timing.read + '秒・シートの更新 ' + r.timing.sheet + '秒・名前の確認 ' + r.timing.names + '秒' + (r.timing.wait > 1 ? '・順番待ち ' + r.timing.wait + '秒' : '');
@@ -537,5 +560,6 @@
   $('finish').onclick = () => end(LEFT > 0 ? '残りの' + LEFT + '人は、あとで管理者が登録します。ありがとう！' : '知らない名前を全部登録しました。ありがとう！');
   $('again').onclick = () => { step(1); show('pageUp'); $('files').value = ''; setPickText(); say($('upMsg'), ''); };
   $('toView').onclick = () => { tab('view'); loadView(''); $('again').onclick(); };
+  $('goUp').onclick = () => tab('up');
 </script>
 </body></html>
