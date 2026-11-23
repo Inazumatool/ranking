@@ -71,7 +71,12 @@
   .act { display: flex; gap: 2px; margin-top: 3px; }
   .act span { font-size: 10px; line-height: 14px; width: 15px; text-align: center; border-radius: 3px; background: #eef0f5; color: #b4b9c6; }
   .act span.a1 { background: #dbe6fb; color: #5b7fc4; }
-  .act span.a2 { background: var(--main); color: #fff; }
+  .act span.a2 { background: #8fb0ee; color: #fff; }
+  .act span.a3 { background: var(--main); color: #fff; }
+  tr.det .bar { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+  tr.det .bar b { width: 2.5em; font-weight: normal; }
+  tr.det .bar i { display: block; height: 8px; background: var(--main); border-radius: 4px; }
+  tr.det h4 { margin: 8px 0 2px; font-size: 12px; color: var(--sub); }
   tr.det td { background: #f7f8fb; text-align: left; font-size: 13px; padding: 8px 10px; }
   tr.det .mv { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eef0f5; }
   tr.det .mv.night { color: var(--sub); }
@@ -113,7 +118,7 @@
         <div id="vMe" class="meline"></div>
         <div id="vInfo" class="info"></div>
         <table><thead><tr><th>順位</th><th>名前</th><th>合計</th><th>当日</th><th>前日</th><th>前々日</th></tr></thead><tbody id="vRows"></tbody></table>
-        <div class="legend">名前の下の5マス＝その日に点が動いた時間帯（朝・昼・夕方・夜・深夜。濃い＝その時間帯、薄い＝このあたり）。行を押すと詳しく出ます。太線＝10位のボーダー　赤＝注目する人　<span class="q">黄</span>＝夜の間に増えた分を、まだ前日・当日に振り分けていない</div>
+        <div class="legend">名前の下の5マス＝このシーズンに点を増やした時間帯の傾向（朝・昼・夕方・夜・深夜。濃いほど多い）。行を押すと詳しく出ます。太線＝10位のボーダー　赤＝注目する人　<span class="q">黄</span>＝夜の間に増えた分を、まだ前日・当日に振り分けていない</div>
       </div>
       <div class="card chart"><h2>ポイントの推移</h2>
         <div class="head" style="margin-bottom:8px"><select id="gRange">
@@ -396,9 +401,10 @@
       $('vRows').innerHTML = d.rows.map(r => {
         const f = r.flag || '---';
         const cls = [r.name === d.meName ? 'me' : '', String(r.rank) === '10' ? 'ten' : ''].join(' ');
-        // 名前の下の5マス：その日に点が動いた時間帯（濃い＝その時間帯の中、薄い＝またがっていてどこか分からない）
-        const ac = r.act ? r.act.act : null;
-        const strip = ac ? '<div class="act">' + ['朝', '昼', '夕', '夜', '深'].map((t, i) => '<span class="a' + ac[i] + '">' + t + '</span>').join('') + '</div>' : '';
+        // 名前の下の5マス：このシーズンに点を増やした時間帯の傾向（その時間帯の割合が多いほど濃い）
+        const sh = r.act && r.act.total ? r.act.share : null;
+        const lv = x => x >= 35 ? 3 : x >= 15 ? 2 : x > 0 ? 1 : 0;
+        const strip = sh ? '<div class="act">' + ['朝', '昼', '夕', '夜', '深'].map((t, i) => '<span class="a' + lv(sh[i]) + '">' + t + '</span>').join('') + '</div>' : '';
         ACTS[r.name] = r.act;
         return '<tr class="' + cls + '" data-name="' + esc(r.name) + '"><td class="rk">' + esc(r.rank) + '</td><td class="nm">' + esc(r.name) + strip + '</td><td>' + esc(r.total) + '</td>'
           + num(r.d0, f[0]) + num(r.d1, f[1]) + num(r.d2, f[2]) + '</tr>';
@@ -434,11 +440,16 @@
     const next = tr.nextElementSibling;
     if (next && next.classList.contains('det')) { next.remove(); return; }
     const x = ACTS[tr.dataset.name];
-    const body = !x ? '<div class="note">この日の記録がありません。</div>'
-      : (x.moves.length
-        ? x.moves.map(m => '<div class="mv' + (m.night ? ' night' : '') + '"><span>' + (m.night ? '夜の間　' : '') + esc(m.from) + ' 〜 ' + esc(m.to) + '</span><span class="' + (m.d > 0 ? 'plus' : 'minus') + '">' + (m.d > 0 ? '+' : '') + esc(m.d) + '（' + esc(m.a) + '→' + esc(m.b) + '）</span></div>').join('')
-        : '<div class="mv"><span>この日は動きなし（スクショ ' + esc(x.shots) + '回・' + esc(x.first) + '〜' + esc(x.last) + '）</span><span></span></div>')
-        + '<div class="note" style="margin-top:4px">スクショとスクショの間に動いた分です。その間のいつ動いたかまでは分かりません。</div>';
+    const mvRow = m => '<div class="mv' + (m.night ? ' night' : '') + '"><span>' + esc(m.date) + '　' + (m.night ? '夜の間 ' : '') + esc(m.from) + ' 〜 ' + esc(m.to) + '</span><span class="' + (m.d > 0 ? 'plus' : 'minus') + '">' + (m.d > 0 ? '+' : '') + esc(m.d) + '</span></div>';
+    const LB = ['朝', '昼', '夕方', '夜', '深夜'], TM = ['5-10時', '10-15時', '15-19時', '19-24時', '0-5時'];
+    const max = x ? Math.max.apply(null, x.share.concat([1])) : 1;
+    const body = !x ? '<div class="note">記録がありません。</div>'
+      : '<h4>殴る時間帯の傾向（このシーズン・' + esc(x.days) + '日分）</h4>'
+        + (x.total ? LB.map((l, i) => '<div class="bar"><b>' + l + '</b><i style="width:' + Math.round(x.share[i] / max * 60) + '%"></i><span>' + esc(x.share[i]) + '%</span><span class="note">（' + TM[i] + '・+' + esc(x.pts[i]) + '）</span></div>').join('')
+          : '<div class="note">まだ点が増えた記録がありません。</div>')
+        + '<h4>この日の動き</h4>' + (x.today.length ? x.today.map(mvRow).join('') : '<div class="note">動きなし</div>')
+        + (x.recent.length ? '<h4>その前の動き（最近の分）</h4>' + x.recent.slice().reverse().map(mvRow).join('') : '')
+        + '<div class="note" style="margin-top:4px">スクショとスクショの間に動いた分から出しています。間が時間帯をまたぐときは、時間の長さで分けています。目安として見てください。</div>';
     const det = document.createElement('tr'); det.className = 'det';
     det.innerHTML = '<td colspan="6">' + body + '<button class="sub" data-focus="' + esc(tr.dataset.name) + '">この人に注目する（赤で表示）</button></td>';
     tr.after(det);
