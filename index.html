@@ -157,6 +157,10 @@
   try { RANGE = localStorage.getItem('range') || 'all'; } catch (e) {}
   try { FOCUS = localStorage.getItem('focus') || ''; } catch (e) {}
   try { TICKET = localStorage.getItem('ticket') || ''; TICKET_UNTIL = localStorage.getItem('ticketUntil') || ''; } catch (e) {}
+  // この端末（ブラウザ）の番号。アクセス記録で「何台くらいが見に来たか」を数えるためだけに使う
+  let DEV = '';
+  try { DEV = localStorage.getItem('dev') || ''; if (!DEV) { const a = new Uint8Array(4); crypto.getRandomValues(a); DEV = Array.from(a).map(x => ('0' + x.toString(16)).slice(-2)).join(''); localStorage.setItem('dev', DEV); } } catch (e) {}
+  function meName() { try { return localStorage.getItem('me') || ''; } catch (e) { return ''; } }
   function saveTicket(t) { // 上げたときにもらった「見られる券」をこのブラウザに覚えておく
     if (!t || !t.ticket) return;
     TICKET = t.ticket; TICKET_UNTIL = t.until || '';
@@ -287,7 +291,7 @@
     try {
       const tp = performance.now(); TP0 = tp;
       // 合言葉の確認と最初の表を同時に頼む（順番に頼むと、通信の待ちが2回分かかるため）
-      const firstView = call('viewDashboard', PASS, '', FOCUS, '', {}, 'table', TICKET).then(d => ({ d: d }), e => ({ e: e }));
+      const firstView = call('viewDashboard', PASS, '', FOCUS, '', {}, 'table', TICKET, DEV, meName()).then(d => ({ d: d }), e => ({ e: e }));
       const r = await call('uploadCheckPassword', PASS);
       if (!r) return say($('passMsg'), '合言葉が違います', 'ng');
       TIMES['合言葉'] = '合言葉 ' + sec(performance.now() - tp);
@@ -348,7 +352,7 @@
     try {
       let d;
       if (pre) { const x = await pre; if (x.e) throw x.e; d = x.d; } // 合言葉と同時に頼んでおいた分
-      else d = await call('viewDashboard', PASS, day, FOCUS, season || '', {}, 'table', TICKET); // 表だけ先に（グラフはボタンで）
+      else d = await call('viewDashboard', PASS, day, FOCUS, season || '', {}, 'table', TICKET, DEV, meName()); // 表だけ先に（グラフはボタンで）
       noteTime('表', t0, d);
       if (TICKET_UNTIL && !SITE.admin) TIMES['期限'] = '見られる期限：' + TICKET_UNTIL;
       if (d.seasons) $('vSeasonSel').innerHTML = d.seasons.map(x => '<option' + (x === (d.season || season) ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
@@ -432,7 +436,7 @@
     $('gShow').disabled = true; $('gShow').textContent = 'グラフを作っています…'; $('gShow').classList.remove('hide');
     try {
       const t0 = performance.now();
-      const d = await call('viewDashboard', PASS, day, FOCUS, '', graphRange(day), 'chart', TICKET);
+      const d = await call('viewDashboard', PASS, day, FOCUS, '', graphRange(day), 'chart', TICKET, DEV, meName());
       if (seq !== CHART_SEQ) return; // 途中で別のグラフを頼んだときは、古い方を捨てる
       noteTime('グラフ', t0, d);
       CHART_ON = true;
