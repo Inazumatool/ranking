@@ -68,6 +68,15 @@
   .q { background: #fff3b0; border-radius: 4px; }
   .legend { font-size: 11px; color: var(--sub); margin-top: 6px; }
   .chart img { width: 100%; height: auto; display: block; border-radius: 8px; }
+  .act { display: flex; gap: 2px; margin-top: 3px; }
+  .act span { font-size: 10px; line-height: 14px; width: 15px; text-align: center; border-radius: 3px; background: #eef0f5; color: #b4b9c6; }
+  .act span.a1 { background: #dbe6fb; color: #5b7fc4; }
+  .act span.a2 { background: var(--main); color: #fff; }
+  tr.det td { background: #f7f8fb; text-align: left; font-size: 13px; padding: 8px 10px; }
+  tr.det .mv { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eef0f5; }
+  tr.det .mv.night { color: var(--sub); }
+  tr.det button { margin-top: 8px; font-size: 13px; padding: 6px 10px; }
+  tr[data-name] { cursor: pointer; }
   #vPred > div { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; border-bottom: 1px solid #eef0f5; }
   .sched { font-size: 13px; }
   #vSched > div { padding: 5px 0; gap: 8px; border-bottom: 1px solid #eef0f5; display: flex; justify-content: space-between; }
@@ -104,7 +113,7 @@
         <div id="vMe" class="meline"></div>
         <div id="vInfo" class="info"></div>
         <table><thead><tr><th>順位</th><th>名前</th><th>合計</th><th>当日</th><th>前日</th><th>前々日</th></tr></thead><tbody id="vRows"></tbody></table>
-        <div class="legend">名前を押すと、その人に注目します。太線＝10位のボーダー　赤＝注目する人　<span class="q">黄</span>＝夜の間に増えた分を、まだ前日・当日に振り分けていない</div>
+        <div class="legend">名前の下の5マス＝その日に点が動いた時間帯（朝・昼・夕方・夜・深夜。濃い＝その時間帯、薄い＝このあたり）。行を押すと詳しく出ます。太線＝10位のボーダー　赤＝注目する人　<span class="q">黄</span>＝夜の間に増えた分を、まだ前日・当日に振り分けていない</div>
       </div>
       <div class="card chart"><h2>ポイントの推移</h2>
         <div class="head" style="margin-bottom:8px"><select id="gRange">
@@ -387,7 +396,11 @@
       $('vRows').innerHTML = d.rows.map(r => {
         const f = r.flag || '---';
         const cls = [r.name === d.meName ? 'me' : '', String(r.rank) === '10' ? 'ten' : ''].join(' ');
-        return '<tr class="' + cls + '" data-name="' + esc(r.name) + '"><td class="rk">' + esc(r.rank) + '</td><td class="nm">' + esc(r.name) + '</td><td>' + esc(r.total) + '</td>'
+        // 名前の下の5マス：その日に点が動いた時間帯（濃い＝その時間帯の中、薄い＝またがっていてどこか分からない）
+        const ac = r.act ? r.act.act : null;
+        const strip = ac ? '<div class="act">' + ['朝', '昼', '夕', '夜', '深'].map((t, i) => '<span class="a' + ac[i] + '">' + t + '</span>').join('') + '</div>' : '';
+        ACTS[r.name] = r.act;
+        return '<tr class="' + cls + '" data-name="' + esc(r.name) + '"><td class="rk">' + esc(r.rank) + '</td><td class="nm">' + esc(r.name) + strip + '</td><td>' + esc(r.total) + '</td>'
           + num(r.d0, f[0]) + num(r.d1, f[1]) + num(r.d2, f[2]) + '</tr>';
       }).join('');
       SDAYS = d.seasonDays || [];
@@ -411,7 +424,25 @@
     loadView(DAY_SHOWN || DAY);   // 今見ている日（シーズン）のまま、注目する人だけ変える
   }
   $('vFocus').onchange = () => setFocus($('vFocus').value);
-  $('vRows').onclick = e => { const tr = e.target.closest('tr'); if (tr && tr.dataset.name) setFocus(tr.dataset.name); };
+  // 行を押すと、その下に「点が動いた時間帯」の詳細を開く（もう一度押すと閉じる）。注目はボタンで
+  const ACTS = {};
+  $('vRows').onclick = e => {
+    const btn = e.target.closest('button[data-focus]');
+    if (btn) return setFocus(btn.dataset.focus);
+    const tr = e.target.closest('tr[data-name]');
+    if (!tr) return;
+    const next = tr.nextElementSibling;
+    if (next && next.classList.contains('det')) { next.remove(); return; }
+    const x = ACTS[tr.dataset.name];
+    const body = !x ? '<div class="note">この日の記録がありません。</div>'
+      : (x.moves.length
+        ? x.moves.map(m => '<div class="mv' + (m.night ? ' night' : '') + '"><span>' + (m.night ? '夜の間　' : '') + esc(m.from) + ' 〜 ' + esc(m.to) + '</span><span class="' + (m.d > 0 ? 'plus' : 'minus') + '">' + (m.d > 0 ? '+' : '') + esc(m.d) + '（' + esc(m.a) + '→' + esc(m.b) + '）</span></div>').join('')
+        : '<div class="mv"><span>この日は動きなし（スクショ ' + esc(x.shots) + '回・' + esc(x.first) + '〜' + esc(x.last) + '）</span><span></span></div>')
+        + '<div class="note" style="margin-top:4px">スクショとスクショの間に動いた分です。その間のいつ動いたかまでは分かりません。</div>';
+    const det = document.createElement('tr'); det.className = 'det';
+    det.innerHTML = '<td colspan="6">' + body + '<button class="sub" data-focus="' + esc(tr.dataset.name) + '">この人に注目する（赤で表示）</button></td>';
+    tr.after(det);
+  };
   $('vDay').onchange = () => loadView($('vDay').value);
   $('vSeasonSel').onchange = () => { CFROM = CTO = ''; loadView('', $('vSeasonSel').value); };
   // グラフの期間：シーズン全体／最近n日（表示中の日まで）／日付を選ぶ
