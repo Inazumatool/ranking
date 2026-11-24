@@ -130,6 +130,9 @@
         <img id="vChart" alt="" class="hide"></div>
       <div class="card pred"><h2>最終日の10位ボーダー予想</h2><div id="vPred"></div><div id="vPredNote" class="note" style="margin-top:6px"></div></div>
       <div class="card sched"><h2>日程</h2><div id="vSched"></div></div>
+      <div class="card hide" id="vEloCard"><h2>相手との点差ごとの獲得点（管理者だけに表示）</h2>
+        <table><thead><tr><th>相手との差</th><th>勝ち</th><th>引き分け</th><th>負け</th></tr></thead><tbody id="vElo"></tbody></table>
+        <div class="note" style="margin-top:6px">差＝相手の点 − 自分の点（プラスは格上）。対戦履歴27試合から逆算した式で、25試合が完全一致。</div></div>
       <div id="vTime" class="info" style="font-size:11px;margin-top:6px"></div>
       <button id="reload" class="sub">最新にする</button>
     </div>
@@ -431,7 +434,12 @@
       $('vChart').parentNode.classList.remove('hide');
       if (CHART_ON) loadChart(); // 一度グラフを開いた人には、日や注目する人を変えたときもグラフを出す
       $('vPred').innerHTML = fcLines(d).map(x => '<div><span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span></div>').join('');
-      $('vPredNote').textContent = d.fc ? 'このシーズンの記録から、1日10回の対戦を5000回シミュレーションした予想です（' + d.fc.at + 'の時点・残り約' + (Math.round(d.fc.days * 10) / 10) + '日）。カッコ内は8割の確率でおさまる範囲。' : '';
+      $('vEloCard').classList.toggle('hide', !d.elo);
+      if (d.elo) {
+        const sg = v => (v > 0 ? '+' : '') + v;
+        $('vElo').innerHTML = d.elo.map(e => '<tr><td>' + (e.diff > 0 ? e.diff + '点上' : e.diff < 0 ? (-e.diff) + '点下' : '同じ') + '</td><td class="plus">' + sg(e.win) + '</td><td>' + sg(e.draw) + '</td><td class="minus">' + sg(e.lose) + '</td></tr>').join('');
+      }
+      $('vPredNote').textContent = d.fc ? 'このシーズンの記録と対戦の点数の式から、1日10回の対戦を3000回シミュレーションした予想です（' + d.fc.at + 'の時点・残り約' + (Math.round(d.fc.days * 10) / 10) + '日）。カッコ内は8割の確率でおさまる範囲。' : '';
       let today = false;
       $('vSched').innerHTML = d.schedule.map(s => {
         const cls = s.done ? 'done' : (!today ? (today = true, 'today') : '');
