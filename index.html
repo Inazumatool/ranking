@@ -123,11 +123,13 @@
       </div>
       <div class="card chart"><h2>ポイントの推移</h2>
         <div class="head" style="margin-bottom:8px"><select id="gRange">
-          <option value="all">シーズン全体</option><option value="3">最近3日</option><option value="5">最近5日</option><option value="7">最近7日</option><option value="custom">日付を選ぶ</option>
+          <option value="all">シーズン全体</option><option value="3">最近3日から</option><option value="5">最近5日から</option><option value="7">最近7日から</option><option value="custom">始まりの日を選ぶ</option>
         </select></div>
-        <div id="gCustom" class="head hide" style="margin-bottom:8px"><select id="gFrom"></select><span>〜</span><select id="gTo"></select></div>
-        <button id="gShow" class="sub">グラフを表示</button>
-        <img id="vChart" alt="" class="hide"></div>
+        <div id="gCustom" class="head hide" style="margin-bottom:8px"><select id="gFrom"></select><span>から最終日まで</span><select id="gTo" class="hide"></select></div>
+        <div id="vGraph"></div>
+        <div class="head" style="margin-top:6px"><select id="gWho"><option value="near">ほかの人：ボーダー付近</option><option value="all">ほかの人：全員</option><option value="none">ほかの人：出さない</option></select></div>
+        <div id="gChips" class="note" style="margin-top:6px"></div>
+        <div class="note" style="margin-top:4px">実線＝これまで（各日の最後のスクショ）、点線と帯＝最終日までの予想（帯は8割の範囲）。名前を押すと、その人の線に色がつきます。</div></div>
       <div class="card pred"><h2>最終日の10位ボーダー予想</h2><div id="vPred"></div><div id="vPredNote" class="note" style="margin-top:6px"></div></div>
       <div class="card sched"><h2>日程</h2><div id="vSched"></div></div>
       <div class="card hide" id="vEloCard"><h2>相手との点差ごとの獲得点（管理者だけに表示）</h2>
@@ -397,7 +399,7 @@
           $('lockMsg').innerHTML = 'このページは、スクショを上げてくれた人だけが見られます。<br>いまのランキング画面を撮って上げると、次の朝5時まで見られるようになります。';
         }
         ['vRows', 'vPred', 'vSched', 'vDay', 'vFocus'].forEach(id => $(id).innerHTML = '');
-        $('vChart').parentNode.classList.add('hide');
+        $('vGraph').parentNode.classList.add('hide');
         document.querySelectorAll('.card.pred, .card.sched').forEach(c => c.classList.add('hide'));
         if (pre) tab('up'); // 開いたときは、いきなり「上げる」画面にする
         return;
@@ -406,7 +408,7 @@
       if (!d.ok) {
         $('vSeason').textContent = d.msg;
         ['vRows', 'vPred', 'vSched', 'vDay', 'vFocus'].forEach(id => $(id).innerHTML = '');
-        $('vMe').textContent = ''; $('vInfo').textContent = ''; $('vChart').parentNode.classList.add('hide');
+        $('vMe').textContent = ''; $('vInfo').textContent = ''; $('vGraph').parentNode.classList.add('hide');
         return;
       }
       $('vSeason').textContent = ''; DAY_SHOWN = d.day;
@@ -431,8 +433,8 @@
       const opts = sel => SDAYS.map(x => '<option' + (x === sel ? ' selected' : '') + ' value="' + x + '">' + esc(x.slice(5)) + '</option>').join('');
       $('gFrom').innerHTML = opts(CFROM || SDAYS[0]); $('gTo').innerHTML = opts(CTO || d.day);
       $('gCustom').classList.toggle('hide', RANGE !== 'custom');
-      $('vChart').parentNode.classList.remove('hide');
-      if (CHART_ON) loadChart(); // 一度グラフを開いた人には、日や注目する人を変えたときもグラフを出す
+      $('vGraph').parentNode.classList.toggle('hide', !(d.fc && d.fc.hist));
+      drawGraph();
       $('vPred').innerHTML = fcLines(d).map(x => '<div><span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span></div>').join('');
       $('vEloCard').classList.toggle('hide', !d.elo);
       if (d.elo) {
@@ -491,29 +493,126 @@
   let DAY_SHOWN = '';
   $('gRange').onchange = () => { RANGE = $('gRange').value; try { localStorage.setItem('range', RANGE); } catch (e) {}
     $('gCustom').classList.toggle('hide', RANGE !== 'custom');
-    if (RANGE === 'custom') { CFROM = $('gFrom').value; CTO = $('gTo').value; }
-    if (CHART_ON) loadChart(); };
-  $('gFrom').onchange = $('gTo').onchange = () => { CFROM = $('gFrom').value; CTO = $('gTo').value; if (CHART_ON) loadChart(); };
-  // グラフ：ボタンを押したときだけ作る（作るのに数秒かかるため）
-  let CHART_SEQ = 0;
-  async function loadChart() {
-    const seq = ++CHART_SEQ, day = DAY_SHOWN;
-    $('gShow').disabled = true; $('gShow').textContent = 'グラフを作っています…'; $('gShow').classList.remove('hide');
-    try {
-      const t0 = performance.now();
-      const d = await call('viewDashboard', PASS, day, FOCUS, '', graphRange(day), 'chart', TICKET, DEV, meName());
-      if (seq !== CHART_SEQ) return; // 途中で別のグラフを頼んだときは、古い方を捨てる
-      noteTime('グラフ', t0, d);
-      CHART_ON = true;
-      $('vChart').src = d.chart ? 'data:image/png;base64,' + d.chart : '';
-      $('vChart').classList.toggle('hide', !d.chart);
-      $('gShow').classList.add('hide');
-    } catch (e) {
-      if (seq !== CHART_SEQ) return;
-      $('gShow').textContent = 'グラフを作れませんでした（もう一度押す）';
-    } finally { if (seq === CHART_SEQ) $('gShow').disabled = false; }
+    if (RANGE === 'custom') CFROM = $('gFrom').value;
+    drawGraph(); };
+  $('gFrom').onchange = () => { CFROM = $('gFrom').value; drawGraph(); };
+  let GWHO = 'near', GHL = {};
+  try { GWHO = localStorage.getItem('gwho') || 'near'; GHL = JSON.parse(localStorage.getItem('ghl') || '{}'); } catch (e) {}
+  $('gWho').value = GWHO;
+  $('gWho').onchange = () => { GWHO = $('gWho').value; try { localStorage.setItem('gwho', GWHO); } catch (e) {} drawGraph(); };
+  $('gChips').onclick = ev => {
+    const b = ev.target.closest('[data-nm]'); if (!b) return;
+    const nm = b.getAttribute('data-nm');
+    if (GHL[nm]) delete GHL[nm]; else GHL[nm] = 1;
+    try { localStorage.setItem('ghl', JSON.stringify(GHL)); } catch (e) {}
+    drawGraph();
+  };
+  const HLC = ['#e08a00', '#2e7d32', '#8e24aa', '#00838f', '#6d4c41', '#c2185b'];
+  // グラフ：右端はいつもシーズンの最終日。選べるのは「どこから見るか」だけ。サイトの中で描く（サーバーで画像を作らない）
+  function drawGraph() {
+    const d = LAST_VIEW, box = $('vGraph');
+    if (!d || !d.fc || !d.fc.hist) { box.innerHTML = ''; return; }
+    const f = d.fc, key = x => x.split('/').join('-');
+    let from = f.start;
+    if (RANGE === 'custom' && CFROM) from = key(CFROM);
+    else if (Number(RANGE)) {
+      const t = new Date(key(d.day) + 'T00:00:00'); t.setDate(t.getDate() - (Number(RANGE) - 1));
+      const z = x => ('0' + x).slice(-2);
+      from = t.getFullYear() + '-' + z(t.getMonth() + 1) + '-' + z(t.getDate());
+    }
+    const hist = f.hist.filter(h => h.day >= from && h.day < f.path[0].day);
+    const path = f.path;
+    // 予想の線は、最後の実績（今日の今の点）からつなぐ
+    const cur = { day: path[0].day, b: null, m: null };
+    const all = hist.map(h => h.day).concat(path.map(p => p.day));
+    const X = {}; all.forEach((dk, i) => { X[dk] = i; });
+    const vals = [];
+    hist.forEach(h => { if (h.b != null) vals.push(h.b); if (h.m != null) vals.push(h.m); });
+    path.forEach(p => { vals.push(p.b[0], p.b[2]); if (p.m) vals.push(p.m[0], p.m[2]); });
+    if (d.fc.me && d.fc.me.now != null) vals.push(d.fc.me.now);
+    // ほかの人：どの人を出すか（ボーダー付近＝最終日の予想が10位予想の上下150点以内）
+    const bEnd = path[path.length - 1].b[1];
+    const oth = (f.others || []).map(o => {
+      const hv = {}; (f.hdays || []).forEach((dk, i) => { if (o.h[i] != null) hv[dk] = o.h[i]; });
+      return { name: o.name, hv: hv, m: o.m, end: o.m[o.m.length - 1] };
+    });
+    const show = oth.filter(o => GHL[o.name] || (GWHO === 'all') || (GWHO === 'near' && Math.abs(o.end - bEnd) <= 150));
+    const hlNames = Object.keys(GHL).filter(nm => oth.some(o => o.name === nm));
+    show.forEach(o => {
+      if (GWHO === 'all' || GHL[o.name] || GWHO === 'near') {
+        hist.forEach(h => { if (o.hv[h.day] != null) vals.push(o.hv[h.day]); });
+        o.m.forEach(v => vals.push(v));
+      }
+    });
+    if (!vals.length) { box.innerHTML = ''; return; }
+    let lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    const padY = Math.max(10, (hi - lo) * 0.08); lo -= padY; hi += padY;
+    const W = 640, H = 300, L = 46, Rr = 12, T = 14, Bm = 30;
+    const px = i => L + (all.length > 1 ? i * (W - L - Rr) / (all.length - 1) : (W - L - Rr) / 2);
+    const py = v => T + (hi - v) * (H - T - Bm) / (hi - lo);
+    const line = (pts, col, dash, w) => pts.length > 1 ? '<polyline fill="none" stroke="' + col + '" stroke-width="' + w + '"' + (dash ? ' stroke-dasharray="6 5"' : '') + ' points="' + pts.map(q => px(q[0]).toFixed(1) + ',' + py(q[1]).toFixed(1)).join(' ') + '"/>' : '';
+    const band = (up, dn, col) => up.length > 1 ? '<polygon fill="' + col + '" points="' + up.concat(dn.slice().reverse()).map(q => px(q[0]).toFixed(1) + ',' + py(q[1]).toFixed(1)).join(' ') + '"/>' : '';
+    let g = '';
+    // 目盛り
+    const step = Math.max(10, Math.ceil((hi - lo) / 5 / 10) * 10);
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+      g += '<line x1="' + L + '" x2="' + (W - Rr) + '" y1="' + py(v) + '" y2="' + py(v) + '" stroke="#eef0f5"/>';
+      g += '<text x="' + (L - 6) + '" y="' + (py(v) + 4) + '" font-size="11" fill="#8a90a0" text-anchor="end">' + v + '</text>';
+    }
+    const every = Math.ceil(all.length / 8);
+    all.forEach((dk, i) => {
+      if (i % every && i !== all.length - 1) return;
+      const lab = Number(dk.slice(5, 7)) + '/' + Number(dk.slice(8, 10)) + (dk === f.end ? '（最終日）' : '');
+      const anc = i === all.length - 1 ? 'end' : i === 0 ? 'start' : 'middle'; // 端の日付が切れないように
+      g += '<text x="' + px(i) + '" y="' + (H - 10) + '" font-size="11" fill="#8a90a0" text-anchor="' + anc + '">' + lab + '</text>';
+    });
+    // 今日の位置
+    g += '<line x1="' + px(X[path[0].day]) + '" x2="' + px(X[path[0].day]) + '" y1="' + T + '" y2="' + (H - Bm) + '" stroke="#c9ceda" stroke-dasharray="2 4"/>';
+    // ほかの人（先に薄く描く。色がついた人は上に重ねる）
+    const drawO = (o, col, w, op) => {
+      const act = hist.filter(h => o.hv[h.day] != null).map(h => [X[h.day], o.hv[h.day]]);
+      const last = act.length ? [act[act.length - 1]] : [];
+      return '<g opacity="' + op + '">' + line(act, col, false, w) + line(last.concat(path.map((p, i) => [X[p.day], o.m[i]])), col, true, w * 0.8) + '</g>';
+    };
+    show.filter(o => !GHL[o.name]).forEach(o => { g += drawO(o, '#9aa3b5', 1.5, 0.55); });
+    const labels = [];
+    show.filter(o => GHL[o.name]).forEach(o => {
+      const col = HLC[hlNames.indexOf(o.name) % HLC.length];
+      g += drawO(o, col, 2.5, 1);
+      labels.push({ y: o.end, col: col, t: o.name + ' ' + o.end });
+    });
+    // ボーダー
+    const lastHB = hist.length ? hist[hist.length - 1] : null;
+    const bStart = lastHB && lastHB.b != null ? [[X[lastHB.day], lastHB.b]] : [];
+    g += band(bStart.concat(path.map(p => [X[p.day], p.b[2]])), bStart.concat(path.map(p => [X[p.day], p.b[0]])), 'rgba(30,58,138,0.12)');
+    g += line(hist.filter(h => h.b != null).map(h => [X[h.day], h.b]), '#1e3a8a', false, 3);
+    g += line(bStart.concat(path.map(p => [X[p.day], p.b[1]])), '#1e3a8a', true, 2.5);
+    // 注目する人
+    if (path[0].m) {
+      const lastHM = hist.filter(h => h.m != null).pop();
+      const nowM = d.fc.me ? [[X[path[0].day], d.fc.me.now]] : [];
+      const mStart = lastHM ? [[X[lastHM.day], lastHM.m]] : [];
+      g += band(mStart.concat(path.map(p => [X[p.day], p.m[2]])), mStart.concat(path.map(p => [X[p.day], p.m[0]])), 'rgba(211,47,47,0.12)');
+      g += line(hist.filter(h => h.m != null).map(h => [X[h.day], h.m]), '#d32f2f', false, 3);
+      g += line(mStart.concat(path.map(p => [X[p.day], p.m[1]])), '#d32f2f', true, 2.5);
+    }
+    const lastB = path[path.length - 1].b[1], lastM = path[path.length - 1].m ? path[path.length - 1].m[1] : null;
+    labels.push({ y: lastB, col: '#1e3a8a', t: '10位 ' + lastB });
+    if (lastM != null) labels.push({ y: lastM, col: '#d32f2f', t: d.fc.me.name + ' ' + lastM });
+    // 右端の名前が重ならないように、上から順に14px以上あける
+    labels.forEach(l => { l.py = py(l.y) - 6; });
+    labels.sort((p, q) => p.py - q.py);
+    for (let i = 1; i < labels.length; i++) if (labels[i].py < labels[i - 1].py + 14) labels[i].py = labels[i - 1].py + 14;
+    labels.forEach(l => {
+      g += '<text x="' + (W - Rr - 2) + '" y="' + Math.max(T + 10, l.py) + '" font-size="12" fill="' + l.col + '" text-anchor="end" font-weight="bold" stroke="#fff" stroke-width="3" paint-order="stroke">' + esc(l.t) + '</text>';
+    });
+    $('gChips').innerHTML = oth.map(o => {
+      const on = GHL[o.name], col = on ? HLC[hlNames.indexOf(o.name) % HLC.length] : '#c9ceda';
+      return '<span data-nm="' + esc(o.name) + '" style="display:inline-block;margin:2px 4px 2px 0;padding:3px 9px;border-radius:12px;cursor:pointer;border:1px solid ' + col + ';' + (on ? 'background:' + col + ';color:#fff' : 'color:#555') + '">' + esc(o.name) + '</span>';
+    }).join('');
+    box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="ポイントの推移"><defs><clipPath id="gClip"><rect x="' + L + '" y="' + T + '" width="' + (W - L - Rr) + '" height="' + (H - T - Bm) + '"/></clipPath></defs>' + g + '</svg>'
+      + '<div class="note"><span style="color:#1e3a8a">━ 10位ボーダー</span>　<span style="color:#d32f2f">━ ' + (d.fc.me ? esc(d.fc.me.name) : '') + '</span></div>';
   }
-  $('gShow').onclick = loadChart;
   $('reload').onclick = () => loadView('');
 
   // ===== 上げる =====
