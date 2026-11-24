@@ -117,6 +117,7 @@
         <select id="vFocus"></select>
         <div id="vMe" class="meline"></div>
         <div id="vInfo" class="info"></div>
+        <button id="saveImg" class="sub" style="margin:6px 0">画像で保存</button>
         <table><thead><tr><th>順位</th><th>名前</th><th>合計</th><th>当日</th><th>前日</th><th>前々日</th></tr></thead><tbody id="vRows"></tbody></table>
         <div class="legend">名前の下の5マス＝このシーズンに点を増やした時間帯の傾向（朝・昼・夕方・夜・深夜。濃いほど多い）。行を押すと詳しく出ます。太線＝10位のボーダー　赤＝注目する人　<span class="q">黄</span>＝夜の間に増えた分を、まだ前日・当日に振り分けていない</div>
       </div>
@@ -127,7 +128,7 @@
         <div id="gCustom" class="head hide" style="margin-bottom:8px"><select id="gFrom"></select><span>〜</span><select id="gTo"></select></div>
         <button id="gShow" class="sub">グラフを表示</button>
         <img id="vChart" alt="" class="hide"></div>
-      <div class="card pred"><h2>最終日の予想（直線の目安）</h2><div id="vPred"></div></div>
+      <div class="card pred"><h2>最終日の10位ボーダー予想</h2><div id="vPred"></div><div id="vPredNote" class="note" style="margin-top:6px"></div></div>
       <div class="card sched"><h2>日程</h2><div id="vSched"></div></div>
       <div id="vTime" class="info" style="font-size:11px;margin-top:6px"></div>
       <button id="reload" class="sub">最新にする</button>
@@ -167,7 +168,7 @@
 <script>
   const $ = id => document.getElementById(id);
   const MAX = 12;
-  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '', CHART_ON = false, TP0 = 0, TICKET = '', TICKET_UNTIL = '', TICKET_NOTE = '', DUP_NOTE = ''; // TP0：合言葉を送った時刻（最初の表はここから測る）
+  let PASS = '', WHO = '', LEFT = 0, FOCUS = '', DAY = '', SITE = {}, SDAYS = [], RANGE = 'all', CFROM = '', CTO = '', TIME_NOTE = '', CHART_ON = false, LAST_VIEW = null, TP0 = 0, TICKET = '', TICKET_UNTIL = '', TICKET_NOTE = '', DUP_NOTE = ''; // TP0：合言葉を送った時刻（最初の表はここから測る）
   try { RANGE = localStorage.getItem('range') || 'all'; } catch (e) {}
   try { FOCUS = localStorage.getItem('focus') || ''; } catch (e) {}
   try { TICKET = localStorage.getItem('ticket') || ''; TICKET_UNTIL = localStorage.getItem('ticketUntil') || ''; } catch (e) {}
@@ -345,6 +346,18 @@
   // 読み込みにかかった時間（遅いときに、どこが遅いか見るため）
   const TIMES = {};
   function sec(x) { return (x / 1000).toFixed(1) + '秒'; }
+  // ボーダー予想の行（画面と画像で同じものを使う）
+  function fcLines(d) {
+    const f = d.fc;
+    if (!f) return (d.pred || []).map(p => [p.label, p.mid + '（' + p.low + '〜' + p.high + '）']);
+    const out = [['10位ボーダー', f.border[1] + '（' + f.border[0] + '〜' + f.border[2] + '）']];
+    if (f.me) {
+      out.push(['◎ ' + f.me.name + '（1日 +' + f.me.pace + '）', f.me.mid[1] + '（' + f.me.mid[0] + '〜' + f.me.mid[2] + '）']);
+      out.push(['10位以内に残る確率', f.me.prob + '%']);
+    }
+    out.push(['安全ライン', '8割 ' + f.safe80 + '／9割 ' + f.safe90]);
+    return out;
+  }
   function noteTime(kind, t0, d) {
     const all = performance.now() - t0, m = (d && d.ms) || {};
     let s = kind + ' ' + sec(all);
@@ -398,6 +411,7 @@
       $('vFocus').innerHTML = d.rows.map(r => '<option' + (r.name === d.meName ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('');
       $('vMe').textContent = d.me || '';
       $('vInfo').textContent = d.info || '';
+      LAST_VIEW = d;
       $('vRows').innerHTML = d.rows.map(r => {
         const f = r.flag || '---';
         const cls = [r.name === d.meName ? 'me' : '', String(r.rank) === '10' ? 'ten' : ''].join(' ');
@@ -416,7 +430,8 @@
       $('gCustom').classList.toggle('hide', RANGE !== 'custom');
       $('vChart').parentNode.classList.remove('hide');
       if (CHART_ON) loadChart(); // 一度グラフを開いた人には、日や注目する人を変えたときもグラフを出す
-      $('vPred').innerHTML = d.pred.map(p => '<div><span>' + esc(p.label) + '</span><span>' + esc(p.mid) + '（' + esc(p.low) + '〜' + esc(p.high) + '）</span></div>').join('');
+      $('vPred').innerHTML = fcLines(d).map(x => '<div><span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span></div>').join('');
+      $('vPredNote').textContent = d.fc ? 'このシーズンの記録から10000回シミュレーションした予想です（' + d.fc.at + 'の時点・残り約' + (Math.round(d.fc.days * 10) / 10) + '日）。カッコ内は8割の確率でおさまる範囲。' : '';
       let today = false;
       $('vSched').innerHTML = d.schedule.map(s => {
         const cls = s.done ? 'done' : (!today ? (today = true, 'today') : '');
@@ -635,6 +650,66 @@
   $('again').onclick = () => { step(1); show('pageUp'); $('files').value = ''; setPickText(); say($('upMsg'), ''); };
   $('toView').onclick = () => { tab('view'); loadView(''); $('again').onclick(); };
   $('goUp').onclick = () => tab('up');
+  // 今見ている順位表を1枚の画像にする（スマホなら共有シート、出せなければダウンロード）
+  $('saveImg').onclick = async () => {
+    const d = LAST_VIEW;
+    if (!d || !d.rows) return;
+    const btn = $('saveImg'); btn.disabled = true; btn.textContent = '画像を作っています…';
+    try {
+      const F = '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",Meiryo,sans-serif';
+      const fl = fcLines(d);
+      const rows = d.rows, W = 720, rowH = 46, top = 168, H = top + rowH * rows.length + 60 + (fl.length ? 50 + fl.length * 30 : 0), S = 2;
+      const c = document.createElement('canvas'); c.width = W * S; c.height = H * S;
+      const g = c.getContext('2d'); g.scale(S, S);
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#1e3a8a'; g.fillRect(0, 0, W, 70);
+      g.fillStyle = '#ffffff'; g.font = 'bold 28px ' + F; g.fillText((SITE.title || 'ランキング') + '　' + d.day, 24, 46);
+      g.fillStyle = '#555c6b'; g.font = '15px ' + F;
+      const sub = [d.info || '', d.me || ''].filter(Boolean);
+      sub.forEach((t, i) => g.fillText(t, 24, 96 + i * 20));
+      const X = { rk: 24, nm: 84, tot: 440, d0: 540, d1: 630 };
+      const right = (t, x, y) => { g.textAlign = 'right'; g.fillText(t, x, y); g.textAlign = 'left'; };
+      g.fillStyle = '#8a90a0'; g.font = 'bold 14px ' + F;
+      g.fillText('順位', X.rk, top - 12); g.fillText('名前', X.nm, top - 12);
+      right('合計', X.tot + 60, top - 12); right('当日', X.d0 + 60, top - 12); right('前日', X.d1 + 60, top - 12);
+      rows.forEach((r, i) => {
+        const y = top + i * rowH;
+        const me = r.name === d.meName;
+        g.fillStyle = me ? '#ffe9e9' : i % 2 ? '#f6f7fb' : '#ffffff'; g.fillRect(16, y, W - 32, rowH);
+        g.fillStyle = me ? '#d32f2f' : '#222831';
+        g.font = 'bold 20px ' + F; g.fillText(String(r.rank), X.rk, y + 30);
+        g.font = (me ? 'bold ' : '') + '19px ' + F;
+        let nm = String(r.name); while (g.measureText(nm).width > 330 && nm.length > 1) nm = nm.slice(0, -1);
+        g.fillText(nm === String(r.name) ? nm : nm + '…', X.nm, y + 30);
+        g.font = 'bold 20px ' + F; right(String(r.total), X.tot + 60, y + 30);
+        const pm = (v, x) => { const n = Number(v); g.fillStyle = v === '' || isNaN(n) ? '#b0b5c0' : n > 0 ? '#1b8a4a' : n < 0 ? '#d32f2f' : '#8a90a0'; g.font = '17px ' + F; right(v === '' ? '-' : (n > 0 ? '+' : '') + v, x + 60, y + 30); };
+        pm(r.d0, X.d0); pm(r.d1, X.d1);
+        if (String(r.rank) === '10') { g.fillStyle = '#1e3a8a'; g.fillRect(16, y + rowH - 2, W - 32, 3); }
+      });
+      if (fl.length) {
+        let y = top + rows.length * rowH + 36;
+        g.fillStyle = '#1e3a8a'; g.font = 'bold 18px ' + F; g.fillText('最終日の10位ボーダー予想', 24, y);
+        fl.forEach((x, i) => {
+          const yy = y + 30 + i * 30;
+          g.fillStyle = '#555c6b'; g.font = '16px ' + F; g.fillText(x[0], 24, yy);
+          g.fillStyle = '#222831'; g.font = 'bold 17px ' + F; right(x[1], W - 24, yy);
+        });
+      }
+      g.fillStyle = '#8a90a0'; g.font = '13px ' + F;
+      g.fillText('太線＝10位のボーダー　当日・前日＝その日に増えた点', 24, H - 22);
+      const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+      const name = 'ranking_' + d.day.split('/').join('') + '.png';
+      const file = new File([blob], name, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file] }); } catch (e) {}
+      } else {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      }
+    } catch (e) { alert('画像を作れませんでした'); }
+    finally { btn.disabled = false; btn.textContent = '画像で保存'; }
+  };
   // 覚えている合言葉を消して、入力画面に戻る（管理用の合言葉で入り直すときなど）。見られる券は消さない
   $('relogin').onclick = e => {
     e.preventDefault();
