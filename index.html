@@ -119,7 +119,7 @@
         <div id="vInfo" class="info"></div>
         <button id="saveImg" class="sub" style="margin:6px 0">画像で保存</button>
         <table><thead><tr><th>順位</th><th>名前</th><th>合計</th><th>当日</th><th>前日</th><th>前々日</th></tr></thead><tbody id="vRows"></tbody></table>
-        <div class="legend">名前の下の5マス＝このシーズンに点を増やした時間帯の傾向（朝・昼・夕方・夜・深夜。濃いほど多い）。行を押すと詳しく出ます。太線＝10位のボーダー　赤＝注目する人　<span class="q">黄</span>＝夜の間に増えた分を、まだ前日・当日に振り分けていない</div>
+        <div class="legend">名前の下の5マス＝このシーズンに殴っていた時間帯の傾向（朝・昼・夕方・夜・深夜。濃いほど多い）。行を押すと詳しく出ます。太線＝10位のボーダー　赤＝注目する人　<span class="q">黄</span>＝夜の間に増えた分を、まだ前日・当日に振り分けていない</div>
       </div>
       <div class="card chart"><h2>ポイントの推移</h2>
         <div class="head" style="margin-bottom:8px"><select id="gRange">
@@ -352,7 +352,7 @@
     if (!f) return (d.pred || []).map(p => [p.label, p.mid + '（' + p.low + '〜' + p.high + '）']);
     const out = [['10位ボーダー', f.border[1] + '（' + f.border[0] + '〜' + f.border[2] + '）']];
     if (f.me) {
-      out.push(['◎ ' + f.me.name + '（1日 +' + f.me.pace + '）', f.me.mid[1] + '（' + f.me.mid[0] + '〜' + f.me.mid[2] + '）']);
+      out.push(['◎ ' + f.me.name + '（1日 +' + f.me.pace + (f.me.win != null ? '・勝率 約' + f.me.win + '%' : '') + '）', f.me.mid[1] + '（' + f.me.mid[0] + '〜' + f.me.mid[2] + '）']);
       out.push(['10位以内に残る確率', f.me.prob + '%']);
     }
     out.push(['安全ライン', '8割 ' + f.safe80 + '／9割 ' + f.safe90]);
@@ -431,7 +431,7 @@
       $('vChart').parentNode.classList.remove('hide');
       if (CHART_ON) loadChart(); // 一度グラフを開いた人には、日や注目する人を変えたときもグラフを出す
       $('vPred').innerHTML = fcLines(d).map(x => '<div><span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span></div>').join('');
-      $('vPredNote').textContent = d.fc ? 'このシーズンの記録から10000回シミュレーションした予想です（' + d.fc.at + 'の時点・残り約' + (Math.round(d.fc.days * 10) / 10) + '日）。カッコ内は8割の確率でおさまる範囲。' : '';
+      $('vPredNote').textContent = d.fc ? 'このシーズンの記録から、1日10回の対戦を5000回シミュレーションした予想です（' + d.fc.at + 'の時点・残り約' + (Math.round(d.fc.days * 10) / 10) + '日）。カッコ内は8割の確率でおさまる範囲。' : '';
       let today = false;
       $('vSched').innerHTML = d.schedule.map(s => {
         const cls = s.done ? 'done' : (!today ? (today = true, 'today') : '');
@@ -460,11 +460,11 @@
     const max = x ? Math.max.apply(null, x.share.concat([1])) : 1;
     const body = !x ? '<div class="note">記録がありません。</div>'
       : '<h4>殴る時間帯の傾向（このシーズン・' + esc(x.days) + '日分）</h4>'
-        + (x.total ? LB.map((l, i) => '<div class="bar"><b>' + l + '</b><i style="width:' + Math.round(x.share[i] / max * 60) + '%"></i><span>' + esc(x.share[i]) + '%</span><span class="note">（' + TM[i] + '・+' + esc(x.pts[i]) + '）</span></div>').join('')
-          : '<div class="note">まだ点が増えた記録がありません。</div>')
+        + (x.total ? LB.map((l, i) => '<div class="bar"><b>' + l + '</b><i style="width:' + Math.round(x.share[i] / max * 60) + '%"></i><span>' + esc(x.share[i]) + '%</span><span class="note">（' + TM[i] + '・' + esc(x.pts[i]) + '点分）</span></div>').join('')
+          : '<div class="note">まだ点が動いた記録がありません。</div>')
         + '<h4>この日の動き</h4>' + (x.today.length ? x.today.map(mvRow).join('') : '<div class="note">動きなし</div>')
         + (x.recent.length ? '<h4>その前の動き（最近の分）</h4>' + x.recent.slice().reverse().map(mvRow).join('') : '')
-        + '<div class="note" style="margin-top:4px">スクショとスクショの間に動いた分から出しています。間が時間帯をまたぐときは、時間の長さで分けています。目安として見てください。</div>';
+        + '<div class="note" style="margin-top:4px">スクショとスクショの間に点が動いた分（勝って増えた・負けて減った）から出しています。間が時間帯をまたぐときは、時間の長さで分けています。目安として見てください。</div>';
     const det = document.createElement('tr'); det.className = 'det';
     det.innerHTML = '<td colspan="6">' + body + '<button class="sub" data-focus="' + esc(tr.dataset.name) + '">この人に注目する（赤で表示）</button></td>';
     tr.after(det);
